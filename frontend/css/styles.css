@@ -1,0 +1,28 @@
+/* Palette e reset di base — documento di progetto, sezione 10.4.
+   La UI chat (bolle, action card, input area) è implementata in Fase 4. */
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --accent: #00d4ff;
+  --accent-dark: #0088aa;
+  --user-bubble: #1a3a4a;
+  --bot-bubble: #1a1a2e;
+  --text-primary: #e0e0e0;
+  --text-secondary: #888888;
+  --border: #222222;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}

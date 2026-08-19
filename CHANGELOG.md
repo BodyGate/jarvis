@@ -1,0 +1,114 @@
+# Changelog
+
+Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
+cronologico inverso (più recente in cima).
+
+## [Unreleased] — Fase 2: Backend Core
+
+### Added
+- App factory Flask (`backend/app/__init__.py`): sessione con cookie
+  `Secure/HttpOnly/SameSite=Strict`, timeout scorrevole 24h (ADR-0005), CORS,
+  guardia globale `before_request` che nega l'accesso a qualsiasi `/api/*`
+  senza sessione valida, oltre alla whitelist (`/api/health`,
+  `/api/session/login`, `/api/session/status`)
+- Autenticazione applicativa (`backend/app/auth.py`, ADR-0002): endpoint
+  `POST /api/session/login`, `POST /api/session/logout`,
+  `GET /api/session/status`; rate limit 5 tentativi/5min sul login
+  (ADR-0005) contro il brute force sull'unica password
+- Router di intenti (`backend/app/router.py`, RF-003): classificazione via
+  Groq, con fallback a `target: local` se Groq non risponde o non è
+  configurato
+- Logica di dominio chat (`backend/app/chat_service.py`): crea/riusa
+  conversazioni, salva messaggi, applica il pattern "copia e apri"
+  (ADR-0003) per i target `claude`/`chatgpt`
+- Endpoint REST chat (`backend/app/chat_routes.py`): `POST /api/chat/message`
+  (rate limit 15/min, ADR-0005), `GET /api/chat/history`,
+  `POST /api/chat/clear`, `GET /api/chat/conversations`
+- WebSocket (`backend/app/sockets.py`, Flask-SocketIO): `connect` verifica la
+  sessione, `join_conversation`, `send_message`/`message`/`typing`;
+  `action_triggered` riconosciuto ma non eseguito (l'esecuzione delle azioni
+  richiede le integrazioni della Fase 3)
+- `backend/run.py`: entrypoint per lo sviluppo locale
+- ADR-0005: valori di timeout sessione e soglie di rate limiting (non
+  specificati nel documento di progetto originale)
+- 20 nuovi test (`backend/tests/test_auth.py`, `test_router.py`,
+  `test_chat_service.py`), tutti passanti (24/24 nel modulo `backend/tests`)
+
+### Fixed
+- Il documento di progetto (sezione 6.3) prevedeva Llama 3.3 70B su Groq, ma
+  il modello è stato rimosso dal catalogo Groq nel frattempo. Sostituito con
+  `openai/gpt-oss-20b` (verificato disponibile via `GET /openai/v1/models` il
+  2026-08-20) — vedi commento in `backend/app/router.py`
+
+### Verified
+- Flusso end-to-end testato manualmente contro Supabase e Groq reali: login
+  (password corretta/errata), classificazione intento (meteo → local, coding
+  → claude, email → local), persistenza conversazioni/messaggi, delega
+  "copia e apri" con prompt di contesto, logout con invalidazione lato
+  client, accesso negato senza sessione
+- Dati di test ripuliti da Supabase al termine della verifica manuale
+
+### Note
+- Deploy su Koyeb rimandato: non abbiamo ancora le credenziali dell'account
+  Koyeb. L'app è verificata solo in locale (`python backend/run.py`)
+- L'esecuzione reale degli specialisti locali (meteo, ricerca, email,
+  calendario) non è collegata: il router classifica correttamente ma
+  `target: local` produce per ora un messaggio segnaposto esplicito, non un
+  risultato inventato — arriva con le integrazioni della Fase 3
+- Il logout è valido solo lato client (sessione stateless firmata, non c'è
+  una revoca lato server): un cookie di sessione copiato prima del logout
+  resta valido fino alla scadenza naturale (24h). Rischio basso per un'app
+  single-user, ma va tenuto presente
+
+## [Unreleased] — Fase 1: Database (eseguito su Supabase)
+
+### Added
+- `backend/db/migrations/0001_initial_schema.sql`: schema completo (6 tabelle,
+  indici, trigger `updated_at`) da documento di progetto sezione 7.1, con RLS
+  deny-by-default su ogni tabella
+- `backend/db/README.md`: istruzioni di esecuzione e checklist di verifica
+- ADR-0004: RLS deny-by-default invece di policy `user_id = auth.uid()`
+  (incompatibile con l'auth applicativa scelta in ADR-0002)
+- `backend/.env` popolato con le credenziali del progetto Supabase reale
+  (non committato, presente in `.gitignore`)
+
+### Verified
+- Migrazione eseguita con successo contro il progetto Supabase reale
+  (2026-08-20), via connessione diretta Python/psycopg2 (nessun `psql`
+  disponibile nell'ambiente)
+- Checklist Fase 1 completata: 6 tabelle create, RLS attiva su tutte,
+  connessione testata con `supabase-py` e service_role key
+
+### Note
+- L'host di connessione diretta `db.<ref>.supabase.co` è IPv6-only e non
+  risolvibile da reti solo-IPv4; usata la connection string del pooler
+  (`aws-0-eu-central-1.pooler.supabase.com`, user `postgres.<ref>`) — vedi
+  `backend/db/README.md` per i dettagli
+- `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` e `OPENWEATHER_API_KEY` restano
+  da fornire per le fasi successive (OAuth Gmail/Calendar, meteo)
+
+## [Unreleased] — Fase 0: Preparazione ambiente
+
+### Added
+- Struttura repository iniziale: `backend/`, `frontend/`, `docs/adr/`
+- `.gitignore` con esclusione di `.env` e segreti
+- Scheletro backend Flask: `app/config.py` (caricamento tipizzato delle variabili
+  d'ambiente) con test unitario associato
+- Scheletro frontend PWA: `index.html` (shell, non ancora la chat UI),
+  `manifest.json`, palette colori (dark mode) da documento di progetto sezione 10.4
+  — l'interfaccia chat completa (bolle messaggio, Socket.IO, Web Speech API,
+  action card) è scope di Fase 4
+- `.env.example` con tutte le variabili richieste dalle integrazioni previste
+  (Groq, Gemini, OpenWeatherMap, Google OAuth, Supabase, sessione app)
+- ADR-0001: frontend vanilla JS invece di Next.js/TypeScript/Tailwind
+- ADR-0002: autenticazione applicativa con password singola + sessione Flask
+- ADR-0003: delega a Claude/ChatGPT tramite pattern "copia e apri" invece del
+  deep link `?q=` previsto dal documento originale (requisito non negoziabile)
+
+### Note
+- Fase 0 richiede anche la creazione manuale di account (Koyeb, Supabase, Groq,
+  Google Cloud Console) e l'ottenimento delle relative API key — attività che
+  l'utente deve completare nel browser; non eseguibili da questo ambiente.
+- Fase 1 (schema DB su Supabase) non è stata eseguita: in attesa di credenziali
+  reali e di conferma esplicita, come da direttive di sviluppo (impatto su dati
+  reali).
