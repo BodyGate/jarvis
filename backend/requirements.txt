@@ -9,6 +9,8 @@ python-dotenv==1.0.1
 cryptography==42.0.8
 supabase==2.5.1
 Flask-Limiter==3.8.0
+gevent==26.8.0
+gevent-websocket==0.10.1
 
 # Test
 pytest==8.2.2
