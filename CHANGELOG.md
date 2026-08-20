@@ -3,6 +3,24 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fix: risposta locale generica (specialist "other")
+
+Bug segnalato dall'utente: chiedendo a JARVIS di presentarsi, il router
+classificava correttamente la richiesta come locale, ma non c'era nessuna
+risposta reale dietro lo specialist "other" — solo un segnaposto
+("Ho classificato la richiesta come locale, ma non ho un modo specifico per
+gestirla ancora."). Il documento di progetto (sezione 6.1) prevede Groq
+anche per generare le risposte locali, non solo per il routing — non era
+ancora implementato.
+
+### Added
+- `backend/app/local_chat.py`: genera una risposta reale via Groq (persona
+  JARVIS, contesto conversazione incluso) per richieste locali generiche
+  (chiacchiere, "presentati", domande di conoscenza generale) che non
+  rientrano in meteo/ricerca/ora/email/calendario
+- 5 nuovi test (`test_local_chat.py`), 128/128 passanti nel modulo
+  `backend/tests`
+
 ## [Unreleased] — Frontend 3D "deep space HUD" (sostituisce l'interfaccia glass/2D)
 
 Ricostruzione completa del frontend a partire da un handoff di design

@@ -24,6 +24,7 @@ from app.constants import DEFAULT_USER_ID
 from app.gmail import GmailError, list_messages
 from app.google_oauth import GoogleOAuthError
 from app.google_tokens_repo import ensure_valid_access_token
+from app.local_chat import LocalChatError, generate_reply
 from app.router import RouterError, classify_image_message, classify_intent
 from app.search import SearchError, web_search
 from app.vision import VisionError, analyze_image
@@ -188,7 +189,16 @@ def _handle_calendar_create(
     return f"Aggiunto «{title}» il {start_dt.strftime('%d/%m/%Y')} alle {start_dt.strftime('%H:%M')}."
 
 
-def _handle_local_specialist(db: Client, classification: dict, user_text: str, settings: Settings) -> str:
+def _handle_general_chat(user_text: str, context: list[dict], settings: Settings) -> str:
+    try:
+        return generate_reply(user_text, context, settings)
+    except LocalChatError as exc:
+        return f"Non sono riuscito a generare una risposta ({exc})."
+
+
+def _handle_local_specialist(
+    db: Client, classification: dict, user_text: str, context: list[dict], settings: Settings
+) -> str:
     specialist = classification.get("specialist") or "other"
     if specialist == "search":
         return _handle_search(user_text, settings)
@@ -211,7 +221,9 @@ def _handle_local_specialist(db: Client, classification: dict, user_text: str, s
             classification.get("event_time") or "09:00",
             settings,
         )
-    return "Ho classificato la richiesta come locale, ma non ho un modo specifico per gestirla ancora."
+    # "other": richiesta locale che non rientra in nessuno specialista dedicato
+    # (chiacchiere, domande generiche) — risposta reale via Groq, non un segnaposto.
+    return _handle_general_chat(user_text, context, settings)
 
 
 def _build_assistant_reply(
@@ -255,7 +267,7 @@ def _build_assistant_reply(
         }
         return message_fields, action_payload
 
-    content = _handle_local_specialist(db, classification, user_text, settings)
+    content = _handle_local_specialist(db, classification, user_text, context, settings)
     message_fields = {"content": content, "action_type": None, "action_payload": None}
     return message_fields, None
 

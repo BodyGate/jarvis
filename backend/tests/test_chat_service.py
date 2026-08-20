@@ -326,13 +326,16 @@ def test_process_message_router_error_falls_back_to_local():
     db = FakeSupabaseClient()
     settings = _settings()
 
-    with patch("app.chat_service.classify_intent", side_effect=RouterError("boom")):
+    with patch("app.chat_service.classify_intent", side_effect=RouterError("boom")), patch(
+        "app.chat_service.generate_reply", return_value="Risposta generica."
+    ):
         result = process_message(
             db, settings, text="qualsiasi cosa", image_base64=None, conversation_id=None
         )
 
     assert result["assistant_message"]["target"] == "local"
     assert result["assistant_message"]["intent"] == "unknown"
+    assert result["assistant_message"]["content"] == "Risposta generica."
 
 
 def test_process_message_rejects_empty_input():
@@ -350,7 +353,7 @@ def test_process_message_reuses_existing_conversation():
     with patch(
         "app.chat_service.classify_intent",
         return_value={"intent": "x", "target": "local", "confidence": 0.5},
-    ):
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
         first = process_message(
             db, settings, text="primo messaggio", image_base64=None, conversation_id=None
         )
