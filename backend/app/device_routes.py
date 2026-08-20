@@ -52,6 +52,20 @@ def delete_device(device_id: str):
 @device_bp.route("/_debug_last_error", methods=["GET"])
 @login_required
 def debug_last_error():
+    import importlib.metadata
+
     from app import device_agent
 
-    return jsonify({"success": True, "data": {"error": device_agent._last_connect_error}})
+    versions = {}
+    for pkg in ("python-socketio", "python-engineio", "Flask-SocketIO"):
+        try:
+            versions[pkg] = importlib.metadata.version(pkg)
+        except importlib.metadata.PackageNotFoundError:
+            versions[pkg] = None
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {"error": device_agent._last_connect_error, "versions": versions},
+        }
+    )
