@@ -94,7 +94,14 @@ def on_agent_command(data):
 
 def main() -> None:
     logger.info("Connessione a %s...", SERVER_URL)
-    sio.connect(SERVER_URL, auth={"token": DEVICE_TOKEN}, transports=["polling", "websocket"])
+    # wait_timeout di default (python-socketio) è 1 secondo: troppo poco per
+    # l'autenticazione lato server, che fa due chiamate HTTP sequenziali a
+    # Supabase (lookup del token + aggiornamento di last_seen_at) — in
+    # locale rientra sotto 1s, ma sulla rete reale verso Render+Supabase no,
+    # causando un fallimento di connessione anche quando l'autenticazione
+    # lato server va a buon fine (scoperto verificando end-to-end contro la
+    # produzione: last_seen_at si aggiornava comunque nonostante l'errore).
+    sio.connect(SERVER_URL, auth={"token": DEVICE_TOKEN}, transports=["polling", "websocket"], wait_timeout=15)
     sio.wait()
 
 

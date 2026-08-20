@@ -45,31 +45,3 @@ def delete_device(device_id: str):
     if not revoke_device(db, device_id):
         return jsonify({"success": False, "error": f"device {device_id!r} non trovato"}), 404
     return jsonify({"success": True})
-
-
-# TODO(temporaneo): diagnostica per il bug "connessione agente rifiutata solo
-# in produzione" — rimuovere questo endpoint una volta risolto.
-@device_bp.route("/_debug_last_error", methods=["GET"])
-@login_required
-def debug_last_error():
-    import importlib.metadata
-
-    from app import device_agent
-
-    versions = {}
-    for pkg in ("python-socketio", "python-engineio", "Flask-SocketIO"):
-        try:
-            versions[pkg] = importlib.metadata.version(pkg)
-        except importlib.metadata.PackageNotFoundError:
-            versions[pkg] = None
-
-    return jsonify(
-        {
-            "success": True,
-            "data": {
-                "error": device_agent._last_connect_error,
-                "auth_received": device_agent._last_auth_received,
-                "versions": versions,
-            },
-        }
-    )

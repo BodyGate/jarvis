@@ -38,6 +38,19 @@ server che lato agente.
   `backend/tests`; verificato anche end-to-end con un agente reale collegato
   in locale (registrazione, comando eseguito, disconnessione pulita)
 
+### Fixed
+- `local_agent/agent.py`: l'agente si connetteva correttamente in locale ma
+  la connessione veniva rifiutata solo in produzione. Causa reale:
+  `wait_timeout` di default di `python-socketio` è 1 secondo, troppo poco
+  per l'autenticazione lato server (due chiamate HTTP sequenziali a
+  Supabase — lookup del token e aggiornamento di `last_seen_at`), che sotto
+  la latenza di rete reale verso Render+Supabase supera facilmente 1s pur
+  completandosi correttamente lato server (il client rinunciava prima che
+  la risposta positiva arrivasse). Alzato a 15s. Diagnosticato ipotizzando
+  prima (erroneamente) una discrepanza di versione di `python-socketio`/
+  `python-engineio` tra locale e produzione — pin comunque mantenuto per
+  igiene, anche se non era la causa reale
+
 ## [Unreleased] — Invio email via chat (RF-007/008)
 
 Primo passo verso un JARVIS che non solo risponde ma esegue azioni per conto
