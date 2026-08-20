@@ -15,6 +15,7 @@ configurabile.
 """
 from __future__ import annotations
 
+import base64
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -29,6 +30,7 @@ from app.email_compose import EmailComposeError, compose_email
 from app.gmail import GmailError, create_draft, list_messages
 from app.google_oauth import GoogleOAuthError
 from app.google_tokens_repo import ensure_valid_access_token
+from app.image_gen import ImageGenError, generate_image
 from app.local_chat import LocalChatError, generate_reply
 from app.memory import extract_facts, get_known_facts, save_facts
 from app.router import RouterError, classify_image_message, classify_intent
@@ -38,9 +40,13 @@ from app.weather import WeatherError, get_weather
 
 logger = logging.getLogger(__name__)
 
+# "claude" resta l'unica delega residua (coding sostanziale): la generazione
+# immagini e la ricerca web approfondita, prima delegate a "chatgpt", sono
+# ora gestite da JARVIS in autonomia (Pollinations.ai gratuito, nessuna
+# chiave — richiesta esplicita dell'utente: "deve farlo Jarvis in
+# autonomia, non dire a me di farlo").
 DELEGATION_URLS = {
     "claude": "https://claude.ai/new",
-    "chatgpt": "https://chatgpt.com/",
 }
 
 
@@ -192,6 +198,26 @@ def _handle_device_open(device_url: Optional[str]) -> str:
     return f"Aperto {device_url} sul PC."
 
 
+def _handle_image_generate(user_text: str, settings: Settings) -> tuple[str, Optional[dict]]:
+    """Genera un'immagine via Pollinations.ai (gratuito, nessuna chiave) e la
+    mostra direttamente in chat — nessuna delega esterna da aprire a mano."""
+    prompt = user_text.strip()
+    if not prompt:
+        return "Cosa vuoi che disegni? Descrivimi l'immagine.", None
+
+    try:
+        image_bytes = generate_image(prompt, settings)
+    except ImageGenError as exc:
+        return f"Non sono riuscito a generare l'immagine ({exc}).", None
+
+    action_payload = {
+        "type": "generated_image",
+        "prompt": prompt,
+        "image_base64": base64.b64encode(image_bytes).decode("ascii"),
+    }
+    return f"Ecco l'immagine per: {prompt}", action_payload
+
+
 def _calendar_range(date_range: str) -> tuple[str, str]:
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -294,6 +320,8 @@ def _handle_local_specialist(
         return _handle_email_send(db, classification.get("email_to"), user_text, context, settings)
     if specialist == "device_open":
         return _handle_device_open(classification.get("device_url")), None
+    if specialist == "image_generate":
+        return _handle_image_generate(user_text, settings)
     if specialist == "calendar_read":
         return _handle_calendar_read(db, classification.get("date_range") or "today", settings), None
     if specialist == "calendar_create":

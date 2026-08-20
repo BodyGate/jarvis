@@ -3,6 +3,36 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Eliminata la delega manuale a ChatGPT: generazione immagini in autonomia
+
+Richiesta esplicita dell'utente: "anche quando deve interpellare ChatGPT
+deve farlo Jarvis in autonomia, non dire a me di farlo". La delega
+"copia il prompt e apri ChatGPT" copriva due casi: generazione immagini e
+ricerca web approfondita. La ricerca approfondita è già coperta dallo
+specialist "search" esistente con il modello Groq più capace; per le
+immagini, verificato che Gemini richiede fatturazione anche per i modelli
+gratuiti nominalmente "flash" (quota gratuita 0 su tutti i modelli immagine
+testati) — trovata invece un'alternativa gratuita reale e verificata,
+Pollinations.ai (nessuna chiave, nessun account). Target "chatgpt" rimosso
+dal router: "claude" resta l'unica delega residua, solo per coding
+sostanziale.
+
+### Added
+- `backend/app/image_gen.py`: genera immagini via Pollinations.ai
+  (`https://image.pollinations.ai/prompt/...`, gratuito, nessuna chiave)
+- `backend/app/router.py`: nuovo specialist locale "image_generate";
+  rimosso "chatgpt" da `VALID_TARGETS` — un residuo "chatgpt" dal modello
+  ricade ora su "local" invece di essere accettato
+- `backend/app/chat_service.py`: `_handle_image_generate()` — l'immagine
+  generata viene mostrata direttamente in chat (azione "generated_image",
+  base64 inline), l'utente non deve aprire nessun servizio esterno
+- `frontend/js/app.js` + `css/styles.css`: la action card ora sa
+  renderizzare anche un'immagine generata, non solo bottoni
+- 7 nuovi test (`test_image_gen.py`, `test_router.py`, `test_chat_service.py`),
+  201/201 passanti nel modulo `backend/tests`; verificato anche end-to-end
+  contro Groq e Pollinations reali (immagine generata e verificata
+  visivamente, non solo per status HTTP)
+
 ## [Unreleased] — Fix: domande generiche/sulle capacità di JARVIS delegate erroneamente a ChatGPT
 
 Segnalato dall'utente in produzione: "Cosa possiamo fare insieme?" (una

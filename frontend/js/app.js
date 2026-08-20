@@ -343,6 +343,13 @@ function renderActionCard(action) {
     open.addEventListener("click", () => window.open(action.url, "_blank", "noopener"));
 
     card.append(copy, open);
+  } else if (action.type === "generated_image") {
+    card.className = "jv-action jv-action-image";
+    const img = document.createElement("img");
+    img.className = "jv-generated-image";
+    img.src = `data:image/jpeg;base64,${action.image_base64}`;
+    img.alt = action.prompt || "Immagine generata";
+    card.appendChild(img);
   } else {
     return;
   }

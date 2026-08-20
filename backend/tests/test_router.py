@@ -72,6 +72,32 @@ def test_classify_intent_returns_specialist_for_local_target():
     assert result["city"] == "Roma"
 
 
+def test_classify_intent_recognizes_image_generate():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "gen_image", "target": "local", "specialist": "image_generate", "confidence": 0.95}
+        )
+        result = classify_intent("genera un'immagine di un gatto astronauta", settings)
+
+    assert result["specialist"] == "image_generate"
+
+
+def test_classify_intent_falls_back_to_local_when_chatgpt_no_longer_valid():
+    """"chatgpt" è stato rimosso da VALID_TARGETS (la delega manuale è stata
+    sostituita da capacità locali reali — generazione immagini via
+    Pollinations e ricerca web sintetizzata): un residuo "chatgpt" dal
+    modello deve ricadere su "local", non essere accettato."""
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "old_delegation", "target": "chatgpt", "specialist": "other", "confidence": 0.8}
+        )
+        result = classify_intent("genera un'immagine di un gatto", settings)
+
+    assert result["target"] == "local"
+
+
 def test_classify_intent_recognizes_conversation_delete():
     settings = _settings()
     with patch("app.router.requests.post") as mock_post:

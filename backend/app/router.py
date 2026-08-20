@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 GROQ_MODEL = "openai/gpt-oss-120b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-VALID_TARGETS = {"local", "chatgpt", "claude", "gemini"}
+VALID_TARGETS = {"local", "claude", "gemini"}
 VALID_SPECIALISTS = {
     "weather",
     "search",
@@ -43,6 +43,7 @@ VALID_SPECIALISTS = {
     "calendar_read",
     "calendar_create",
     "conversation_delete",
+    "image_generate",
     "other",
 }
 
@@ -72,23 +73,26 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
     una o più conversazioni/chat (es. "cancella questa conversazione",
     "elimina questa chat", "elimina tutte le conversazioni", "cancella tutta
     la cronologia") — non per cancellare un singolo messaggio o un'email
+  - "image_generate": l'utente chiede di generare/creare/disegnare
+    un'immagine (es. "genera un'immagine di...", "disegnami...",
+    "creami un'illustrazione di...")
   - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra —
     include SEMPRE chiacchiere, saluti, domande su di sé/sulle proprie
     capacità ("cosa sai fare", "cosa possiamo fare insieme", "chi sei"),
-    opinioni, spiegazioni generiche, domande di cultura generale: JARVIS deve
-    rispondere da sé, mai delegare per questo genere di richieste
+    opinioni, spiegazioni generiche, domande di cultura generale, ricerche
+    web anche approfondite (usa "search"): JARVIS deve rispondere/agire da
+    sé, mai delegare per questo genere di richieste
 - target "claude": SOLO richieste esplicite e sostanziali di scrivere/correggere/
   spiegare codice, o di analizzare un documento/file allegato. Non usarlo per
   domande generiche di programmazione che si possono spiegare a parole.
-- target "chatgpt": SOLO richieste esplicite di generare un'immagine, o di
-  cercare/riassumere informazioni molto recenti da più fonti web in modo
-  approfondito (non una semplice ricerca — quella è "search" locale).
-- target "gemini": mai per testo puro (riservato alle immagini, gestite separatamente)
+- target "gemini": mai per testo puro (riservato alle immagini allegate
+  dall'utente da analizzare, gestite separatamente — non per generarle)
 
-Nel dubbio tra "local"/"other" e una delega a "claude"/"chatgpt", scegli
-SEMPRE "local"/"other": la delega apre un servizio esterno con un
-copia-incolla manuale, va riservata solo ai casi in cui è chiaramente
-indispensabile, non usata come risposta di default per l'incertezza.
+JARVIS deve risolvere da sé qualunque richiesta possibile con gli strumenti
+sopra, senza mai chiedere all'utente di aprire un altro servizio: "claude" è
+l'unica delega residua rimasta (coding sostanziale), da usare solo quando
+davvero indispensabile, mai come risposta di default per l'incertezza — nel
+dubbio scegli sempre "local"/"other".
 
 Quando specialist è "weather", estrai anche il nome della città menzionata
 (in italiano, es. "Roma", "Parigi") nel campo "city". Se l'utente non
@@ -128,7 +132,7 @@ Quando specialist è "conversation_delete", determina "delete_scope":
 Per ogni altro specialist, "delete_scope" è null.
 
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "device_url": "<url_o_null>", "delete_scope": "<all|current|null>", "confidence": <0.0-1.0>}}
+{{"intent": "<breve_slug_intento>", "target": "local|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "device_url": "<url_o_null>", "delete_scope": "<all|current|null>", "confidence": <0.0-1.0>}}
 """
 
 

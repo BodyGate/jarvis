@@ -333,6 +333,56 @@ def test_process_message_device_open_sends_command_to_connected_device():
     assert "open.spotify.com" in result["assistant_message"]["content"]
 
 
+def test_process_message_image_generate_returns_generated_image_action():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "gen_image",
+            "target": "local",
+            "specialist": "image_generate",
+            "confidence": 0.95,
+        },
+    ), patch("app.chat_service.generate_image", return_value=b"fake-jpeg-bytes") as mock_gen:
+        result = process_message(
+            db, settings, text="genera un'immagine di un gatto astronauta",
+            image_base64=None, conversation_id=None,
+        )
+
+    mock_gen.assert_called_once_with("genera un'immagine di un gatto astronauta", settings)
+    assert result["action"]["type"] == "generated_image"
+    assert result["action"]["prompt"] == "genera un'immagine di un gatto astronauta"
+    import base64
+    assert result["action"]["image_base64"] == base64.b64encode(b"fake-jpeg-bytes").decode("ascii")
+    assert result["assistant_message"]["action_type"] == "generated_image"
+
+
+def test_process_message_image_generate_handles_failure_gracefully():
+    from app.image_gen import ImageGenError
+
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "gen_image",
+            "target": "local",
+            "specialist": "image_generate",
+            "confidence": 0.95,
+        },
+    ), patch("app.chat_service.generate_image", side_effect=ImageGenError("timeout")):
+        result = process_message(
+            db, settings, text="genera un'immagine di un gatto",
+            image_base64=None, conversation_id=None,
+        )
+
+    assert result["action"] is None
+    assert "Non sono riuscito a generare l'immagine" in result["assistant_message"]["content"]
+
+
 def test_process_message_calendar_create_without_title_asks_to_repeat():
     db = FakeSupabaseClient()
     settings = _settings()
