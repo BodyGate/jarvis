@@ -568,6 +568,20 @@ input::placeholder {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
+  max-height: 45vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .16) transparent;
+}
+
+.jv-transcript::-webkit-scrollbar {
+  width: 5px;
+}
+
+.jv-transcript::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .16);
+  border-radius: 3px;
 }
 
 .jv-msg {

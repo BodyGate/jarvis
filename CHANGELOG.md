@@ -3,6 +3,23 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fix: aprendo una conversazione si vedeva solo l'ultimo scambio
+
+Segnalato dall'utente: aprendo una conversazione dalla lista si leggeva solo
+l'ultimo messaggio, non l'intera cronologia. Causa: il trascritto era
+limitato a 2 messaggi (`.slice(-2)`) per design del layout originale del
+dock, mai rivisto per l'uso reale — un limite artificiale, non un bug di
+rendering.
+
+### Fixed
+- `frontend/js/app.js`: rimosso il limite di 2 messaggi in
+  `selectConversation`/`pushTranscript` — ora mostra l'intera cronologia
+  della conversazione aperta, con auto-scroll all'ultimo messaggio
+- `frontend/css/styles.css`: il trascritto è ora scrollabile
+  (`max-height: 45vh`, scrollbar sottile) invece di crescere senza limite
+- Verificato dal vivo in locale: conversazione con 11 messaggi, tutti
+  visibili e scrollabili, auto-scroll corretto su nuovo messaggio
+
 ## [Unreleased] — Contesto attivo per i progetti
 
 L'utente ha chiesto se i progetti avessero un campo descrizione/contesto:

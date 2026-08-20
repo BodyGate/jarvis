@@ -70,7 +70,7 @@ let socket = null;
 let currentConversationId = null;
 let pendingImage = null;
 let requestToken = 0;
-let msgs = []; // trascritto visibile, max 2 — { who: 'you'|'jarvis', text }
+let msgs = []; // trascritto visibile, tutta la cronologia della conversazione aperta — { who: 'you'|'jarvis', text }
 let pendingAction = null; // action_payload dell'ultimo messaggio assistant, o null
 
 const CAPTIONS = {
@@ -208,8 +208,7 @@ async function selectConversation(id) {
   renderSidebarRows();
   const { ok, body } = await api(`/api/chat/history?conversation_id=${id}`);
   if (ok && body?.data) {
-    const all = body.data.messages;
-    msgs = all.slice(-2).map((m) => ({ who: m.role === "user" ? "you" : "jarvis", text: m.content }));
+    msgs = body.data.messages.map((m) => ({ who: m.role === "user" ? "you" : "jarvis", text: m.content }));
     renderTranscript();
   }
 }
@@ -287,7 +286,7 @@ function setMode(mode, subCaptionOverride) {
   renderBrainChips();
 }
 
-// ---------- Trascritto (ultime 2 battute) ----------
+// ---------- Trascritto (intera cronologia della conversazione aperta) ----------
 
 function renderTranscript() {
   transcriptEl.innerHTML = "";
@@ -298,10 +297,11 @@ function renderTranscript() {
     transcriptEl.appendChild(div);
   }
   if (pendingAction) renderActionCard(pendingAction);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
 function pushTranscript(who, text) {
-  msgs = [...msgs, { who, text }].slice(-2);
+  msgs = [...msgs, { who, text }];
   renderTranscript();
 }
 
