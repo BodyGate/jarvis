@@ -258,12 +258,14 @@ def _handle_general_chat(user_text: str, context: list[dict], settings: Settings
         return f"Non sono riuscito a generare una risposta ({exc})."
 
 
-def _handle_conversation_delete(has_active_conversation: bool) -> str:
-    if not has_active_conversation:
-        return "Non c'è una conversazione attiva da eliminare — selezionane una dalla lista, poi ripeti la richiesta."
+def _handle_conversation_delete(has_active_conversation: bool, delete_scope: str) -> str:
     # La cancellazione vera e propria avviene in process_message, dopo aver
     # salvato questa risposta: eliminare la riga qui romperebbe l'insert del
     # messaggio assistant che sta per essere scritto nella stessa conversazione.
+    if delete_scope == "all":
+        return "Ok, elimino tutte le conversazioni."
+    if not has_active_conversation:
+        return "Non c'è una conversazione attiva da eliminare — selezionane una dalla lista, poi ripeti la richiesta."
     return "Ok, elimino questa conversazione."
 
 
@@ -303,7 +305,7 @@ def _handle_local_specialist(
             settings,
         ), None
     if specialist == "conversation_delete":
-        return _handle_conversation_delete(has_active_conversation), None
+        return _handle_conversation_delete(has_active_conversation, classification.get("delete_scope") or "current"), None
     # "other": richiesta locale che non rientra in nessuno specialista dedicato
     # (chiacchiere, domande generiche) — risposta reale via Groq, non un segnaposto.
     return _handle_general_chat(user_text, context, settings, known_facts), None
@@ -472,25 +474,27 @@ def process_message(
     # sulla conversazione appena eliminata). ON DELETE CASCADE sullo schema
     # (Fase 1) elimina automaticamente anche tutti i messaggi, inclusi
     # quelli appena scritti in questo stesso turno.
-    if (
-        not has_image
-        and had_existing_conversation
-        and classification.get("specialist") == "conversation_delete"
-    ):
-        try:
-            db.table("conversations").delete().eq("id", conv_id).execute()
-        except Exception:
-            # Non deve mai arrivare un 500 grezzo all'utente per un errore
-            # del DB (es. un vincolo FK inatteso) — la conversazione resta
-            # attiva e lo si tratta come un turno normale.
-            logger.exception("Cancellazione conversazione %s fallita", conv_id)
-        else:
-            return {
-                "conversation_id": None,
-                "user_message": user_message,
-                "assistant_message": assistant_message,
-                "action": action_payload,
-            }
+    if not has_image and classification.get("specialist") == "conversation_delete":
+        delete_scope = classification.get("delete_scope") or "current"
+        should_delete = delete_scope == "all" or (delete_scope == "current" and had_existing_conversation)
+        if should_delete:
+            try:
+                if delete_scope == "all":
+                    db.table("conversations").delete().eq("user_id", DEFAULT_USER_ID).execute()
+                else:
+                    db.table("conversations").delete().eq("id", conv_id).execute()
+            except Exception:
+                # Non deve mai arrivare un 500 grezzo all'utente per un errore
+                # del DB (es. un vincolo FK inatteso) — la conversazione resta
+                # attiva e lo si tratta come un turno normale.
+                logger.exception("Cancellazione conversazione(i) fallita (scope=%s)", delete_scope)
+            else:
+                return {
+                    "conversation_id": None,
+                    "user_message": user_message,
+                    "assistant_message": assistant_message,
+                    "action": action_payload,
+                }
 
     _touch_conversation(db, conv_id)
 

@@ -21,10 +21,14 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 # Il documento di progetto (sezione 6.3) prevedeva Llama 3.3 70B su Groq, ma il
-# modello è stato rimosso dal catalogo Groq dopo la stesura del documento.
-# openai/gpt-oss-20b è l'equivalente attuale più vicino per un router veloce
-# (RNF-002: <2s), verificato disponibile su GET /openai/v1/models il 2026-08-20.
-GROQ_MODEL = "openai/gpt-oss-20b"
+# modello è stato rimosso dal catalogo Groq dopo la stesura del documento (e,
+# verificato di nuovo il 2026-08-20, l'intera API Llama ufficiale di Meta è
+# stata dismessa nel frattempo — non è più un'opzione a nessun costo).
+# openai/gpt-oss-120b (upgrade da gpt-oss-20b, richiesto dall'utente per
+# migliorare la comprensione del linguaggio naturale restando a costo zero)
+# è il modello più capace ancora nel piano gratuito Groq, verificato
+# disponibile su GET /openai/v1/models il 2026-08-20.
+GROQ_MODEL = "openai/gpt-oss-120b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 VALID_TARGETS = {"local", "chatgpt", "claude", "gemini"}
@@ -65,8 +69,9 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
   - "calendar_read": leggere eventi calendario
   - "calendar_create": creare un evento calendario
   - "conversation_delete": l'utente chiede esplicitamente di cancellare/eliminare
-    la conversazione o chat corrente (es. "cancella questa conversazione",
-    "elimina questa chat") — non per cancellare un singolo messaggio o un'email
+    una o più conversazioni/chat (es. "cancella questa conversazione",
+    "elimina questa chat", "elimina tutte le conversazioni", "cancella tutta
+    la cronologia") — non per cancellare un singolo messaggio o un'email
   - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra
 - target "claude": richieste di coding, analisi di documenti, reasoning approfondito
   (specialist non rilevante, usa "other")
@@ -103,8 +108,16 @@ WhatsApp Web → "https://web.whatsapp.com", Netflix → "https://netflix.com").
 Se non riesci a determinare un URL con sicurezza, usa null — non inventare.
 Per ogni altro specialist, "device_url" è null.
 
+Quando specialist è "conversation_delete", determina "delete_scope":
+- "all" se l'utente chiede esplicitamente di eliminare TUTTE le conversazioni
+  o l'intera cronologia (es. "elimina tutte le conversazioni", "cancella
+  tutto", "elimina tutte", "non serve selezionarle, eliminale tutte")
+- "current" se si riferisce a una singola conversazione, quella attiva
+  (es. "cancella questa conversazione", "elimina questa chat")
+Per ogni altro specialist, "delete_scope" è null.
+
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "device_url": "<url_o_null>", "confidence": <0.0-1.0>}}
+{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "device_url": "<url_o_null>", "delete_scope": "<all|current|null>", "confidence": <0.0-1.0>}}
 """
 
 
@@ -169,6 +182,9 @@ def classify_intent(text: str, settings: Settings) -> dict:
     event_time = _clean_str(classification.get("event_time")) or "09:00"
     email_to = _clean_str(classification.get("email_to"))
     device_url = _clean_str(classification.get("device_url"))
+    delete_scope = classification.get("delete_scope")
+    if delete_scope not in {"all", "current"}:
+        delete_scope = "current"
 
     specialist = specialist if target == "local" else None
 
@@ -183,6 +199,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
         "event_time": event_time if specialist == "calendar_create" else None,
         "email_to": email_to if specialist == "email_send" else None,
         "device_url": device_url if specialist == "device_open" else None,
+        "delete_scope": delete_scope if specialist == "conversation_delete" else None,
         "confidence": float(classification.get("confidence", 0.0)),
     }
 
@@ -201,5 +218,6 @@ def classify_image_message() -> dict:
         "event_time": None,
         "email_to": None,
         "device_url": None,
+        "delete_scope": None,
         "confidence": 1.0,
     }

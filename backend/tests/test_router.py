@@ -54,6 +54,7 @@ def test_classify_intent_returns_parsed_classification():
         "event_time": None,
         "email_to": None,
         "device_url": None,
+        "delete_scope": None,
         "confidence": 0.9,
     }
 
@@ -80,6 +81,52 @@ def test_classify_intent_recognizes_conversation_delete():
         result = classify_intent("cancella questa conversazione", settings)
 
     assert result["specialist"] == "conversation_delete"
+
+
+def test_classify_intent_recognizes_delete_all_scope():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "delete_all_chats",
+                "target": "local",
+                "specialist": "conversation_delete",
+                "delete_scope": "all",
+                "confidence": 0.95,
+            }
+        )
+        result = classify_intent("elimina tutte le conversazioni", settings)
+
+    assert result["specialist"] == "conversation_delete"
+    assert result["delete_scope"] == "all"
+
+
+def test_classify_intent_defaults_delete_scope_to_current():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "delete_chat", "target": "local", "specialist": "conversation_delete", "confidence": 0.9}
+        )
+        result = classify_intent("cancella questa conversazione", settings)
+
+    assert result["delete_scope"] == "current"
+
+
+def test_classify_intent_ignores_delete_scope_for_non_delete_specialist():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "read_email",
+                "target": "local",
+                "specialist": "email_read",
+                "delete_scope": "all",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("leggi le mie email", settings)
+
+    assert result["delete_scope"] is None
 
 
 def test_classify_intent_extracts_email_to_for_email_send():
@@ -253,5 +300,6 @@ def test_classify_image_message_always_targets_gemini():
         "event_time": None,
         "email_to": None,
         "device_url": None,
+        "delete_scope": None,
         "confidence": 1.0,
     }

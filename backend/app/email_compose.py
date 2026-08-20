@@ -10,11 +10,9 @@ import logging
 import requests
 
 from app.config import Settings
+from app.router import GROQ_MODEL, GROQ_URL
 
 logger = logging.getLogger(__name__)
-
-GROQ_MODEL = "openai/gpt-oss-20b"
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = """Sei JARVIS, l'assistente personale dell'utente. Ti ha chiesto di scrivere
 un'email. Scrivi un oggetto breve e un corpo email completo e ben scritto in italiano,

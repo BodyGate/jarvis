@@ -3,6 +3,35 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Cancellazione di tutte le conversazioni + modello Groq più capace
+
+L'utente aveva chiesto ripetutamente "elimina tutte le conversazioni" (anche
+con formulazioni diverse, es. "non c'è bisogno di selezionarle, devi
+eliminarle tutte") e otteneva sempre la cancellazione della sola
+conversazione attiva — non esisteva alcuna via per eliminarle tutte insieme,
+un gap funzionale reale, non un bug. Nello stesso giro, upgrade del modello
+Groq usato per routing/chat locale/composizione email da `gpt-oss-20b` a
+`gpt-oss-120b` (più capace, verificato ancora nel piano gratuito): valutate e
+scartate le alternative a pagamento (Claude API) e quelle non più disponibili
+(l'API ufficiale Llama di Meta è stata dismessa), Gemini resta candidato per
+un secondo cervello di riserva più intelligente, non ancora implementato.
+
+### Added
+- `backend/app/router.py`: nuovo campo "delete_scope" ("current"|"all")
+  quando specialist è "conversation_delete", riconosce esplicitamente
+  richieste di cancellazione totale
+- `backend/app/chat_service.py`: la cancellazione totale elimina tutte le
+  conversazioni dell'utente (funziona anche senza una conversazione attiva
+  selezionata, a differenza della cancellazione singola)
+- 5 nuovi test (`test_router.py`, `test_chat_service.py`), 194/194 passanti
+  nel modulo `backend/tests`; verificato anche contro Groq reale in locale
+  con la stessa identica formulazione che aveva fallito in produzione
+
+### Changed
+- `backend/app/router.py` (`GROQ_MODEL`), `backend/app/email_compose.py`
+  (ora importa la costante da `router.py` invece di duplicarla): modello
+  Groq aggiornato a `openai/gpt-oss-120b`
+
 ## [Unreleased] — Fix: cancellazione conversazione con fatti di memoria associati falliva con un 500
 
 Bug reale in produzione, segnalato dall'utente con uno screenshot ("Something

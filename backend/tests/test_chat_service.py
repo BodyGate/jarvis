@@ -701,3 +701,70 @@ def test_process_message_conversation_delete_without_active_conversation():
 
     assert result["conversation_id"] is not None  # non è stato eliminato nulla
     assert "seleziona" in result["assistant_message"]["content"].lower()
+
+
+def test_process_message_conversation_delete_all_removes_every_conversation():
+    """L'utente aveva chiesto ripetutamente "elimina tutte le conversazioni"
+    e otteneva sempre "Ok, elimino questa conversazione" — veniva cancellata
+    solo quella attiva perché non esisteva alcuna via per eliminarle tutte.
+    Segnalato dall'utente in produzione con uno screenshot."""
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
+        first = process_message(db, settings, text="ciao", image_base64=None, conversation_id=None)
+        second = process_message(db, settings, text="ehi", image_base64=None, conversation_id=None)
+    assert first["conversation_id"] != second["conversation_id"]
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "delete_all_chats",
+            "target": "local",
+            "specialist": "conversation_delete",
+            "delete_scope": "all",
+            "confidence": 0.95,
+        },
+    ):
+        result = process_message(
+            db, settings, text="elimina tutte le conversazioni",
+            image_base64=None, conversation_id=first["conversation_id"],
+        )
+
+    assert result["conversation_id"] is None
+    assert "tutte le conversazioni" in result["assistant_message"]["content"].lower()
+    assert db._store["conversations"] == []
+
+
+def test_process_message_conversation_delete_all_works_without_active_conversation():
+    """A differenza della cancellazione della sola conversazione attiva,
+    "elimina tutte" deve funzionare anche senza una conversazione
+    selezionata: è un'azione globale, non legata al contesto corrente."""
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
+        process_message(db, settings, text="ciao", image_base64=None, conversation_id=None)
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "delete_all_chats",
+            "target": "local",
+            "specialist": "conversation_delete",
+            "delete_scope": "all",
+            "confidence": 0.95,
+        },
+    ):
+        result = process_message(
+            db, settings, text="elimina tutte le conversazioni", image_base64=None, conversation_id=None
+        )
+
+    assert result["conversation_id"] is None
+    assert db._store["conversations"] == []
