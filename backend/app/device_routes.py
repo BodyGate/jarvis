@@ -66,6 +66,10 @@ def debug_last_error():
     return jsonify(
         {
             "success": True,
-            "data": {"error": device_agent._last_connect_error, "versions": versions},
+            "data": {
+                "error": device_agent._last_connect_error,
+                "auth_received": device_agent._last_auth_received,
+                "versions": versions,
+            },
         }
     )
