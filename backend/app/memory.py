@@ -109,3 +109,28 @@ def get_known_facts(db: Client, limit: int = 30) -> list[dict]:
         .execute()
     )
     return result.data
+
+
+def list_all_facts(db: Client) -> list[dict]:
+    """Tutti i fatti memorizzati, per la sezione Libreria — a differenza di
+    `get_known_facts` (usata per iniettare contesto nei prompt, quindi
+    limitata) qui serve l'elenco completo che l'utente può consultare/gestire."""
+    result = (
+        db.table("user_facts")
+        .select("id, category, fact, confidence, created_at")
+        .eq("user_id", DEFAULT_USER_ID)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data
+
+
+def delete_fact(db: Client, fact_id: str) -> bool:
+    result = (
+        db.table("user_facts")
+        .delete()
+        .eq("id", fact_id)
+        .eq("user_id", DEFAULT_USER_ID)
+        .execute()
+    )
+    return bool(result.data)

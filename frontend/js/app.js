@@ -45,6 +45,10 @@ const panelBrainEl = $("jv-panel-brain");
 const ttsBtn = $("tts-btn");
 const googleBtn = $("google-btn");
 const logoutBtn = $("logout-btn");
+const libraryBtn = $("library-btn");
+const libraryOverlay = $("library-overlay");
+const libraryCloseBtn = $("library-close-btn");
+const libraryListEl = $("library-list");
 
 let scene = null;
 let socket = null;
@@ -631,6 +635,58 @@ logoutBtn.addEventListener("click", async () => {
   await api("/api/session/logout", { method: "POST" });
   disconnectSocket();
   showLogin();
+});
+
+// ---------- Libreria (fatti di memoria a lungo termine, RF-013) ----------
+
+function formatFactCategory(category) {
+  const labels = { preference: "Preferenza", contact: "Contatto", habit: "Abitudine", work: "Lavoro" };
+  return labels[category] || category || "";
+}
+
+function renderLibraryList(facts) {
+  libraryListEl.innerHTML = "";
+  if (!facts.length) {
+    const empty = document.createElement("div");
+    empty.className = "jv-library-empty";
+    empty.textContent = "Non ricordo ancora niente di te — parliamo un po'.";
+    libraryListEl.appendChild(empty);
+    return;
+  }
+  for (const f of facts) {
+    const item = document.createElement("div");
+    item.className = "jv-library-item";
+    item.innerHTML = `<div class="jv-library-item-body">
+        <div class="jv-library-item-fact"></div>
+        <div class="jv-library-item-meta"></div>
+      </div>
+      <button type="button" class="jv-library-item-delete" title="Dimentica">&times;</button>`;
+    item.querySelector(".jv-library-item-fact").textContent = f.fact;
+    item.querySelector(".jv-library-item-meta").textContent =
+      formatFactCategory(f.category) + " · " + formatWhen(f.created_at);
+    item.querySelector(".jv-library-item-delete").addEventListener("click", async () => {
+      const { ok } = await api(`/api/library/facts/${f.id}`, { method: "DELETE" });
+      if (ok) item.remove();
+      if (ok && !libraryListEl.children.length) renderLibraryList([]);
+    });
+    libraryListEl.appendChild(item);
+  }
+}
+
+async function openLibrary() {
+  libraryOverlay.hidden = false;
+  const { ok, body } = await api("/api/library/facts");
+  renderLibraryList(ok && body?.data ? body.data.facts : []);
+}
+
+function closeLibrary() {
+  libraryOverlay.hidden = true;
+}
+
+libraryBtn.addEventListener("click", openLibrary);
+libraryCloseBtn.addEventListener("click", closeLibrary);
+libraryOverlay.addEventListener("click", (e) => {
+  if (e.target === libraryOverlay) closeLibrary();
 });
 
 // ---------- Google ----------

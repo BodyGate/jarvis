@@ -3,6 +3,30 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Sezione Libreria (1/3): fatti di memoria a lungo termine finalmente visibili
+
+L'utente ha chiesto un modulo organizzativo (Progetti, Libreria, Siti Web)
+per JARVIS — costruito qui il primo dei tre, non da JARVIS stesso (rifiutata
+esplicitamente la richiesta di dare a JARVIS accesso diretto a GitHub/deploy:
+stesso principio "cambiamenti seri li vediamo assieme" già concordato, con
+gli incidenti reali di oggi come esempio concreto del rischio). Libreria
+usa dati che esistevano già (RF-013) ma erano invisibili all'utente, quindi
+zero nuovo schema — solo endpoint ed interfaccia mancanti.
+
+### Added
+- `backend/app/memory.py`: `list_all_facts()` (elenco completo, a differenza
+  di `get_known_facts()` che è limitata e serve solo per i prompt),
+  `delete_fact()`
+- `backend/app/library_routes.py`: `GET /api/library/facts`,
+  `DELETE /api/library/facts/<id>`
+- `frontend/index.html` + `js/app.js` + `css/styles.css`: pannello Libreria
+  (nuovo pulsante nella status bar), elenco dei fatti con categoria,
+  quando appresi, e cancellazione per riga
+- 9 nuovi test (`test_memory.py`, `test_library_routes.py`), 209/209
+  passanti nel modulo `backend/tests`; verificato anche dal vivo in locale
+  contro dati reali accumulati in sessione (11 fatti, inclusi alcuni residui
+  di test con nomi sbagliati ripuliti tramite la nuova interfaccia)
+
 ## [Unreleased] — Eliminata la delega manuale a ChatGPT: generazione immagini in autonomia
 
 Richiesta esplicita dell'utente: "anche quando deve interpellare ChatGPT

@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import requests
 
 from app.config import Settings
-from app.memory import extract_facts, get_known_facts, save_facts
+from app.memory import delete_fact, extract_facts, get_known_facts, list_all_facts, save_facts
 from tests.fake_supabase import FakeSupabaseClient
 
 
@@ -128,3 +128,30 @@ def test_save_and_get_known_facts_roundtrip():
 def test_get_known_facts_returns_empty_when_none_saved():
     db = FakeSupabaseClient()
     assert get_known_facts(db) == []
+
+
+def test_list_all_facts_includes_id_for_management():
+    db = FakeSupabaseClient()
+    save_facts(db, [{"category": "habit", "fact": "Corre ogni mattina", "confidence": 0.8}], source_message_id=None)
+
+    facts = list_all_facts(db)
+
+    assert len(facts) == 1
+    assert "id" in facts[0]
+    assert facts[0]["fact"] == "Corre ogni mattina"
+
+
+def test_delete_fact_removes_it():
+    db = FakeSupabaseClient()
+    save_facts(db, [{"category": "habit", "fact": "Corre ogni mattina", "confidence": 0.8}], source_message_id=None)
+    fact_id = list_all_facts(db)[0]["id"]
+
+    result = delete_fact(db, fact_id)
+
+    assert result is True
+    assert list_all_facts(db) == []
+
+
+def test_delete_fact_returns_false_for_unknown_id():
+    db = FakeSupabaseClient()
+    assert delete_fact(db, "does-not-exist") is False

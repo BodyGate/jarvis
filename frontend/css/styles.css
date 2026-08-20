@@ -884,6 +884,103 @@ input::placeholder {
   color: rgba(206, 218, 255, .72);
 }
 
+/* ---------- Libreria (fatti di memoria, RF-013) ---------- */
+
+.jv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 5, 11, .6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: jvRise .18s ease-out;
+}
+
+.jv-modal {
+  width: 480px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--panel-a) 0%, var(--panel-b) 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .6);
+}
+
+.jv-modal-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin: 0 0 14px;
+}
+
+.jv-library-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jv-library-empty {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  padding: 20px 0;
+  text-align: center;
+}
+
+.jv-library-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--border);
+}
+
+.jv-library-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jv-library-item-fact {
+  font-size: 13px;
+  color: var(--text-primary-2);
+  line-height: 1.45;
+}
+
+.jv-library-item-meta {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(170, 186, 240, .42);
+  margin-top: 4px;
+}
+
+.jv-library-item-delete {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: rgba(206, 218, 255, .55);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: filter .15s, color .15s;
+}
+
+.jv-library-item-delete:hover {
+  color: #ff8a8a;
+  filter: brightness(1.2);
+}
+
 /* ---------- Responsive (<900px, come da spec) ---------- */
 
 @media (max-width: 899px) {

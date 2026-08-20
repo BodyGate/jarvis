@@ -66,6 +66,9 @@
         </div>
         <!-- Utility (non nel design originale: funzioni reali dell'app) -->
         <div class="jv-utility">
+          <button id="library-btn" class="jv-icon-btn" type="button" title="Libreria">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h4a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H4V4Zm16 0h-4a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H20V4Z"/></svg>
+          </button>
           <button id="tts-btn" class="jv-icon-btn active" type="button" title="Disattiva voce risposte">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05A4.49 4.49 0 0 0 16.5 12ZM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77Z"/></svg>
           </button>
@@ -143,6 +146,19 @@
           <span id="jv-panel-brain" class="jv-panel-brain"></span>
         </div>
       </aside>
+
+      <!-- Sezione Libreria: fatti di memoria a lungo termine (RF-013),
+           prima invisibili all'utente -->
+      <div id="library-overlay" class="jv-modal-overlay" hidden>
+        <div class="jv-modal">
+          <div class="jv-panel-top">
+            <span class="jv-label-mono">Libreria</span>
+            <button id="library-close-btn" class="jv-chip-btn" type="button">ESC</button>
+          </div>
+          <p class="jv-modal-desc">Fatti che JARVIS ricorda di te nel tempo.</p>
+          <div id="library-list" class="jv-library-list"></div>
+        </div>
+      </div>
 
     </section>
 
