@@ -36,6 +36,7 @@ VALID_SPECIALISTS = {
     "email_search",
     "calendar_read",
     "calendar_create",
+    "conversation_delete",
     "other",
 }
 
@@ -57,6 +58,9 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
   - "email_search": cercare email specifiche
   - "calendar_read": leggere eventi calendario
   - "calendar_create": creare un evento calendario
+  - "conversation_delete": l'utente chiede esplicitamente di cancellare/eliminare
+    la conversazione o chat corrente (es. "cancella questa conversazione",
+    "elimina questa chat") — non per cancellare un singolo messaggio o un'email
   - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra
 - target "claude": richieste di coding, analisi di documenti, reasoning approfondito
   (specialist non rilevante, usa "other")

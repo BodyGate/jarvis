@@ -1,6 +1,8 @@
 """Endpoint REST della chat (sezione 9.1 del documento di progetto)."""
 from __future__ import annotations
 
+import uuid
+
 from flask import Blueprint, current_app, jsonify, request
 
 from app.auth import login_required
@@ -122,3 +124,30 @@ def conversations():
         c["last_target"] = last_target.get(c["id"])
 
     return jsonify({"success": True, "data": {"conversations": convs}})
+
+
+@chat_bp.route("/conversations/<conversation_id>", methods=["DELETE"])
+@login_required
+def delete_conversation(conversation_id: str):
+    """Elimina una conversazione e, in cascata (schema Fase 1), i suoi
+    messaggi. Endpoint diretto per il frontend, oltre alla cancellazione
+    via chat (specialist "conversation_delete")."""
+    try:
+        uuid.UUID(conversation_id)
+    except ValueError:
+        return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non trovata"}), 404
+
+    settings = current_app.config["JARVIS_SETTINGS"]
+    db = get_supabase_client(settings)
+
+    result = (
+        db.table("conversations")
+        .delete()
+        .eq("id", conversation_id)
+        .eq("user_id", DEFAULT_USER_ID)
+        .execute()
+    )
+    if not result.data:
+        return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non trovata"}), 404
+
+    return jsonify({"success": True})

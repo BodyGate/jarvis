@@ -69,6 +69,17 @@ def test_classify_intent_returns_specialist_for_local_target():
     assert result["city"] == "Roma"
 
 
+def test_classify_intent_recognizes_conversation_delete():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "delete_chat", "target": "local", "specialist": "conversation_delete", "confidence": 0.95}
+        )
+        result = classify_intent("cancella questa conversazione", settings)
+
+    assert result["specialist"] == "conversation_delete"
+
+
 def test_classify_intent_ignores_city_for_non_weather_specialist():
     settings = _settings()
     with patch("app.router.requests.post") as mock_post:
