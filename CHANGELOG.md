@@ -48,7 +48,20 @@ cronologico inverso (più recente in cima).
 - Meteo (RF-012) e Gmail/Calendar (RF-005→RF-010) restano da collegare:
   servono `OPENWEATHER_API_KEY` e `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
   (quest'ultimo per l'intero flusso OAuth, non ancora implementato)
-- Non ancora ridistribuito su Render — verificato solo in locale finora
+- **Rischio noto sulla ricerca**: `ddgs` non ha un'API ufficiale, ruota fra
+  più motori (DuckDuckGo, Mojeek, Bing, ...) e da Render è stato osservato
+  restituire risultati completamente estranei alla query una volta su tre
+  tentativi (query su "Python 3.14" → risultati sul dizionario della parola
+  "origin"), oltre a timeout occasionali — riproducibile solo dall'IP di
+  Render, non dalla rete locale. Non è un bug nel nostro codice: è
+  l'affidabilità reale del provider di ricerca non ufficiale scelto dal
+  documento originale. Se diventa un problema in uso reale, valutare un'API
+  di ricerca a pagamento con free tier (es. Brave Search API) come
+  alternativa più solida.
+
+### Deployed
+- Fase 3 (ricerca + visione) ridistribuita su Render e verificata: /health,
+  login, specialist "time" e "search" funzionanti in produzione
 
 ## [Unreleased] — Deploy: Render
 
