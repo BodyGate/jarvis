@@ -7,7 +7,7 @@ SQLAlchemy==2.0.31
 authlib==1.3.1
 python-dotenv==1.0.1
 cryptography==42.0.8
-supabase==2.5.1
+supabase==2.31.0
 Flask-Limiter==3.8.0
 gevent==26.8.0
 gevent-websocket==0.10.1
@@ -15,10 +15,6 @@ gevent-websocket==0.10.1
 # pacchetto è stato rinominato/sostituito da `ddgs` (versione attivamente
 # mantenuta); `duckduckgo-search` restituiva solo RatelimitException.
 ddgs==9.15.0
-# Pin esplicito: ddgs dichiara di richiedere httpx>=0.28.1, ma quella
-# versione rompe supabase-py (richiede httpx<0.28). 0.27.2 funziona con
-# entrambi nella pratica (verificato manualmente).
-httpx==0.27.2
 
 # Test
 pytest==8.2.2

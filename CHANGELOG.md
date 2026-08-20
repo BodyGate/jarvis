@@ -26,8 +26,14 @@ cronologico inverso (più recente in cima).
   chiamata. Sostituita con `ddgs`, l'erede attivamente mantenuto dello
   stesso progetto — vedi commento in `requirements.txt`
 - `ddgs` dichiara di richiedere `httpx>=0.28.1`, incompatibile con
-  `supabase-py` (`httpx<0.28`); pinnato `httpx==0.27.2`, verificato
-  funzionante con entrambi
+  `supabase-py 2.5.1` (`httpx<0.28`). Il pin `httpx==0.27.2` sembrava
+  funzionare in locale ma falliva su Render: un `pip install -r
+  requirements.txt` in un venv pulito è più severo del `pip install`
+  incrementale usato per testarlo qui (`ResolutionImpossible`, verificato
+  riproducendo l'errore in un venv pulito). Risolto aggiornando
+  `supabase` a `2.31.0`, che non fissa più `httpx<0.28` — nessun pin
+  aggiuntivo necessario, verificato con test suite completa e connessione
+  Supabase reale sia nel venv pulito che nell'ambiente di sviluppo
 - Gemini 1.5 Flash (sezione 6.3) non esiste più; anche `gemini-2.5-flash`
   (elencato dall'API) risulta "no longer available to new users" — l'errore
   404 stesso indicava `gemini-3.6-flash` come sostituto
