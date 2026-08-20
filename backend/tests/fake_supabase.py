@@ -87,6 +87,14 @@ class _Query:
         if self._mode == "delete":
             remaining = [r for r in rows if r not in matching]
             self._store[self._table] = remaining
+            if self._table == "conversations":
+                # Emula la ON DELETE CASCADE dello schema reale (Fase 1):
+                # eliminare una conversazione elimina anche i suoi messaggi.
+                deleted_ids = {r["id"] for r in matching}
+                messages = self._store.setdefault("messages", [])
+                self._store["messages"] = [
+                    m for m in messages if m.get("conversation_id") not in deleted_ids
+                ]
             return _Result(matching)
 
         # select

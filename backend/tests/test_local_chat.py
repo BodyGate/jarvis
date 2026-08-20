@@ -57,6 +57,27 @@ def test_generate_reply_includes_context_in_messages():
     assert sent_messages[-1] == {"role": "user", "content": "come mi chiamo?"}
 
 
+def test_generate_reply_includes_known_facts_in_system_prompt():
+    settings = _settings()
+    known_facts = [{"category": "preference", "fact": "Odia il caffè", "confidence": 0.9}]
+    with patch("app.local_chat.requests.post") as mock_post:
+        mock_post.return_value = _groq_response("ok")
+        generate_reply("cosa mi consigli per colazione?", [], settings, known_facts=known_facts)
+
+    system_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "Odia il caffè" in system_prompt
+
+
+def test_generate_reply_without_known_facts_has_no_facts_section():
+    settings = _settings()
+    with patch("app.local_chat.requests.post") as mock_post:
+        mock_post.return_value = _groq_response("ok")
+        generate_reply("ciao", [], settings)
+
+    system_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "sai già su questo utente" not in system_prompt
+
+
 def test_generate_reply_raises_without_api_key():
     settings = _settings(groq_api_key=None)
     with pytest.raises(LocalChatError):

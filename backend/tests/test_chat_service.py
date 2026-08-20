@@ -8,6 +8,16 @@ from app.config import Settings
 from tests.fake_supabase import FakeSupabaseClient
 
 
+@pytest.fixture(autouse=True)
+def _no_real_fact_extraction():
+    """`extract_facts` (RF-013) farebbe una vera chiamata Groq se non mockata
+    — qui è irrilevante per la maggior parte dei test di questo file, quindi
+    la si disattiva di default. I test dedicati alla memoria la rimockano
+    esplicitamente per verificarne il comportamento."""
+    with patch("app.chat_service.extract_facts", return_value=[]):
+        yield
+
+
 def _settings():
     return Settings(
         flask_env="development",
@@ -367,3 +377,109 @@ def test_process_message_reuses_existing_conversation():
 
     assert first["conversation_id"] == second["conversation_id"]
     assert len(db._store["messages"]) == 4  # 2 user + 2 assistant
+
+
+def test_process_message_saves_extracted_facts_tied_to_user_message():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="Piacere Marco."), patch(
+        "app.chat_service.extract_facts",
+        return_value=[{"category": "contact", "fact": "L'utente si chiama Marco", "confidence": 0.9}],
+    ):
+        result = process_message(
+            db, settings, text="mi chiamo Marco", image_base64=None, conversation_id=None
+        )
+
+    saved_facts = db._store["user_facts"]
+    assert len(saved_facts) == 1
+    assert saved_facts[0]["fact"] == "L'utente si chiama Marco"
+    assert saved_facts[0]["source_message_id"] == result["user_message"]["id"]
+
+
+def test_process_message_passes_known_facts_to_general_chat():
+    db = FakeSupabaseClient()
+    settings = _settings()
+    db.table("user_facts").insert(
+        {"user_id": "default", "category": "preference", "fact": "Odia il caffè", "confidence": 0.9}
+    ).execute()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.extract_facts", return_value=[]), patch(
+        "app.chat_service.generate_reply", return_value="ok"
+    ) as mock_generate:
+        process_message(db, settings, text="cosa mi consigli?", image_base64=None, conversation_id=None)
+
+    known_facts_arg = mock_generate.call_args.kwargs["known_facts"]
+    assert any(f["fact"] == "Odia il caffè" for f in known_facts_arg)
+
+
+def test_process_message_no_facts_extracted_when_nothing_notable():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "time", "confidence": 0.5},
+    ), patch("app.chat_service.extract_facts", return_value=[]):
+        process_message(db, settings, text="che ore sono?", image_base64=None, conversation_id=None)
+
+    assert "user_facts" not in db._store or db._store["user_facts"] == []
+
+
+def test_process_message_conversation_delete_removes_active_conversation():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
+        first = process_message(
+            db, settings, text="ciao", image_base64=None, conversation_id=None
+        )
+    conv_id = first["conversation_id"]
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "delete_chat",
+            "target": "local",
+            "specialist": "conversation_delete",
+            "confidence": 0.9,
+        },
+    ):
+        result = process_message(
+            db, settings, text="cancella questa conversazione", image_base64=None, conversation_id=conv_id
+        )
+
+    assert result["conversation_id"] is None
+    assert "elimino questa conversazione" in result["assistant_message"]["content"].lower()
+    assert not any(c["id"] == conv_id for c in db._store["conversations"])
+    assert not any(m["conversation_id"] == conv_id for m in db._store["messages"])
+
+
+def test_process_message_conversation_delete_without_active_conversation():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "delete_chat",
+            "target": "local",
+            "specialist": "conversation_delete",
+            "confidence": 0.9,
+        },
+    ):
+        result = process_message(
+            db, settings, text="cancella questa conversazione", image_base64=None, conversation_id=None
+        )
+
+    assert result["conversation_id"] is not None  # non è stato eliminato nulla
+    assert "seleziona" in result["assistant_message"]["content"].lower()

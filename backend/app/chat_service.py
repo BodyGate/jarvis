@@ -25,6 +25,7 @@ from app.gmail import GmailError, list_messages
 from app.google_oauth import GoogleOAuthError
 from app.google_tokens_repo import ensure_valid_access_token
 from app.local_chat import LocalChatError, generate_reply
+from app.memory import extract_facts, get_known_facts, save_facts
 from app.router import RouterError, classify_image_message, classify_intent
 from app.search import SearchError, web_search
 from app.vision import VisionError, analyze_image
@@ -189,15 +190,30 @@ def _handle_calendar_create(
     return f"Aggiunto «{title}» il {start_dt.strftime('%d/%m/%Y')} alle {start_dt.strftime('%H:%M')}."
 
 
-def _handle_general_chat(user_text: str, context: list[dict], settings: Settings) -> str:
+def _handle_general_chat(user_text: str, context: list[dict], settings: Settings, known_facts: list[dict]) -> str:
     try:
-        return generate_reply(user_text, context, settings)
+        return generate_reply(user_text, context, settings, known_facts=known_facts)
     except LocalChatError as exc:
         return f"Non sono riuscito a generare una risposta ({exc})."
 
 
+def _handle_conversation_delete(has_active_conversation: bool) -> str:
+    if not has_active_conversation:
+        return "Non c'è una conversazione attiva da eliminare — selezionane una dalla lista, poi ripeti la richiesta."
+    # La cancellazione vera e propria avviene in process_message, dopo aver
+    # salvato questa risposta: eliminare la riga qui romperebbe l'insert del
+    # messaggio assistant che sta per essere scritto nella stessa conversazione.
+    return "Ok, elimino questa conversazione."
+
+
 def _handle_local_specialist(
-    db: Client, classification: dict, user_text: str, context: list[dict], settings: Settings
+    db: Client,
+    classification: dict,
+    user_text: str,
+    context: list[dict],
+    settings: Settings,
+    known_facts: list[dict],
+    has_active_conversation: bool,
 ) -> str:
     specialist = classification.get("specialist") or "other"
     if specialist == "search":
@@ -221,9 +237,11 @@ def _handle_local_specialist(
             classification.get("event_time") or "09:00",
             settings,
         )
+    if specialist == "conversation_delete":
+        return _handle_conversation_delete(has_active_conversation)
     # "other": richiesta locale che non rientra in nessuno specialista dedicato
     # (chiacchiere, domande generiche) — risposta reale via Groq, non un segnaposto.
-    return _handle_general_chat(user_text, context, settings)
+    return _handle_general_chat(user_text, context, settings, known_facts)
 
 
 def _build_assistant_reply(
@@ -233,6 +251,8 @@ def _build_assistant_reply(
     user_text: str,
     settings: Settings,
     image_base64: Optional[str],
+    known_facts: list[dict],
+    has_active_conversation: bool,
 ) -> tuple[dict, Optional[dict]]:
     """Ritorna (campi_messaggio_assistant, action_payload_o_None)."""
     target = classification["target"]
@@ -250,6 +270,11 @@ def _build_assistant_reply(
         for msg in context[-10:]:
             speaker = "Utente" if msg["role"] == "user" else "JARVIS"
             prompt_lines.append(f"{speaker}: {msg['content']}")
+        if known_facts:
+            prompt_lines.append("")
+            prompt_lines.append("Cosa sai già su di me (usalo se pertinente):")
+            for f in known_facts:
+                prompt_lines.append(f"- {f['fact']}")
         prompt_lines.append(f"Richiesta attuale: {user_text}")
         prompt = "\n".join(prompt_lines)
 
@@ -267,7 +292,9 @@ def _build_assistant_reply(
         }
         return message_fields, action_payload
 
-    content = _handle_local_specialist(db, classification, user_text, context, settings)
+    content = _handle_local_specialist(
+        db, classification, user_text, context, settings, known_facts, has_active_conversation
+    )
     message_fields = {"content": content, "action_type": None, "action_payload": None}
     return message_fields, None
 
@@ -289,6 +316,7 @@ def process_message(
 
     conversation = get_or_create_conversation(db, conversation_id, text or "Immagine")
     conv_id = conversation["id"]
+    had_existing_conversation = conversation_id is not None
 
     has_image = bool(image_base64)
     user_insert = (
@@ -326,8 +354,23 @@ def process_message(
         .execute()
     )
 
+    # RF-013: estrazione best-effort di nuovi fatti dal messaggio dell'utente,
+    # usati subito anche nella risposta di questo stesso turno.
+    known_facts = get_known_facts(db)
+    new_facts = extract_facts(text, known_facts, settings)
+    if new_facts:
+        save_facts(db, new_facts, user_message["id"])
+        known_facts = new_facts + known_facts
+
     assistant_fields, action_payload = _build_assistant_reply(
-        db, classification, history_result.data, text, settings, image_base64
+        db,
+        classification,
+        history_result.data,
+        text,
+        settings,
+        image_base64,
+        known_facts,
+        had_existing_conversation,
     )
 
     assistant_insert = (
@@ -347,6 +390,24 @@ def process_message(
         .execute()
     )
     assistant_message = assistant_insert.data[0]
+
+    # Cancellazione differita a *dopo* aver salvato la risposta di conferma:
+    # farlo prima romperebbe l'insert del messaggio assistant qui sopra (FK
+    # sulla conversazione appena eliminata). ON DELETE CASCADE sullo schema
+    # (Fase 1) elimina automaticamente anche tutti i messaggi, inclusi
+    # quelli appena scritti in questo stesso turno.
+    if (
+        not has_image
+        and had_existing_conversation
+        and classification.get("specialist") == "conversation_delete"
+    ):
+        db.table("conversations").delete().eq("id", conv_id).execute()
+        return {
+            "conversation_id": None,
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "action": action_payload,
+        }
 
     _touch_conversation(db, conv_id)
 

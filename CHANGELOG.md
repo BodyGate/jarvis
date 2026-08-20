@@ -3,6 +3,49 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Cancellazione conversazioni via chat (richiesta dall'utente)
+
+L'utente ha segnalato che, chiedendo a JARVIS di eliminare vecchie
+conversazioni di test, l'assistente rispondeva di non poterlo fare. Aggiunta
+la capacità di eliminare la conversazione attiva su richiesta in linguaggio
+naturale, più un endpoint REST equivalente per il frontend.
+
+### Added
+- `backend/app/router.py`: nuovo specialist `conversation_delete` riconosciuto
+  dal classificatore Groq
+- `backend/app/chat_service.py`: `_handle_conversation_delete()` — se non
+  c'è una conversazione attiva selezionata chiede all'utente di sceglierne
+  una, altrimenti conferma ed elimina la conversazione (in `process_message`,
+  solo dopo aver salvato la risposta di conferma, per non rompere l'insert
+  del messaggio assistant; i messaggi vengono rimossi in cascata dallo schema
+  del DB — `ON DELETE CASCADE`, Fase 1)
+- `backend/app/chat_routes.py`: `DELETE /api/chat/conversations/<id>`,
+  scoping per utente, 404 per id inesistenti o non-UUID (senza questo
+  controllo un id malformato causava un 500 da Postgres invece di un 404,
+  scoperto durante la verifica manuale contro il DB reale)
+- 5 nuovi test (`test_router.py`, `test_chat_service.py`,
+  `test_chat_routes.py`), 150/150 passanti nel modulo `backend/tests`
+
+## [Unreleased] — Memoria a lungo termine (RF-013)
+
+Su richiesta dell'utente ("implementiamo subito memoria a lungo termine"),
+JARVIS ora estrae e ricorda fatti rilevanti sull'utente (preferenze,
+contatti, abitudini, lavoro) tra conversazioni diverse, e li usa per
+personalizzare sia le risposte locali sia le richieste delegate a
+Claude/ChatGPT.
+
+### Added
+- `backend/app/memory.py`: `extract_facts()` (Groq, prompt conservativo che
+  riceve i fatti già noti per evitare duplicati; non solleva mai eccezioni —
+  in caso di errore restituisce `[]` così l'estrazione non può mai rompere
+  il flusso della chat), `save_facts()`, `get_known_facts()`
+  (tabella `user_facts`)
+- `backend/app/chat_service.py`: ogni messaggio utente viene analizzato per
+  nuovi fatti; i fatti noti vengono iniettati sia in `local_chat.py` (risposte
+  generiche) sia nel prompt copiato per Claude/ChatGPT
+- 13 nuovi test (`test_memory.py`, `test_local_chat.py`,
+  `test_chat_service.py`)
+
 ## [Unreleased] — Fix: risposta locale generica (specialist "other")
 
 Bug segnalato dall'utente: chiedendo a JARVIS di presentarsi, il router

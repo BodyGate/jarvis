@@ -7,6 +7,8 @@ generazione, come da stack tecnologico (sezione 6.1: "Risposte AI: Groq API
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import requests
 
 from app.config import Settings
@@ -14,18 +16,26 @@ from app.router import GROQ_MODEL, GROQ_URL
 
 SYSTEM_PROMPT = """Sei JARVIS, un assistente personale AI colloquiale e diretto, ispirato al JARVIS di Iron Man.
 Rispondi sempre in italiano, in modo conciso e naturale (2-4 frasi, a meno che l'utente chieda esplicitamente qualcosa di più lungo).
-Non hai accesso in tempo reale a meteo, email, calendario o ricerca web in questa risposta: se l'utente te lo chiede esplicitamente, invitalo a riformulare la richiesta in modo più diretto (es. "che tempo fa a Roma")."""
+Non hai accesso in tempo reale a meteo, email, calendario o ricerca web in questa risposta: se l'utente te lo chiede esplicitamente, invitalo a riformulare la richiesta in modo più diretto (es. "che tempo fa a Roma").{facts_block}"""
 
 
 class LocalChatError(RuntimeError):
     """Sollevato quando la generazione della risposta locale fallisce."""
 
 
-def generate_reply(text: str, context: list[dict], settings: Settings) -> str:
+def _facts_block(known_facts: Optional[list[dict]]) -> str:
+    if not known_facts:
+        return ""
+    lines = "\n".join(f"- {f['fact']}" for f in known_facts)
+    return f"\n\nQuello che sai già su questo utente (RF-013, usalo se pertinente, non ripeterlo a pappagallo):\n{lines}"
+
+
+def generate_reply(text: str, context: list[dict], settings: Settings, known_facts: Optional[list[dict]] = None) -> str:
     if not settings.groq_api_key:
         raise LocalChatError("GROQ_API_KEY non configurata")
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = SYSTEM_PROMPT.format(facts_block=_facts_block(known_facts))
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in context[-10:]:
         role = "user" if msg.get("role") == "user" else "assistant"
         messages.append({"role": role, "content": msg.get("content", "")})
