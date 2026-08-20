@@ -26,18 +26,38 @@ GROQ_MODEL = "openai/gpt-oss-20b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 VALID_TARGETS = {"local", "chatgpt", "claude", "gemini"}
+VALID_SPECIALISTS = {
+    "weather",
+    "search",
+    "time",
+    "email_read",
+    "email_search",
+    "calendar_read",
+    "calendar_create",
+    "other",
+}
 
 SYSTEM_PROMPT = """Sei il router di intenti di JARVIS, un assistente personale.
-Classifica il messaggio dell'utente in un intent e un target, seguendo queste regole:
+Classifica il messaggio dell'utente in intent, target e specialist, seguendo queste regole:
 
-- target "local": domande semplici gestibili senza un modello pesante (meteo, ora/data,
-  calcoli, ricerca web rapida, lettura/ricerca email, lettura/creazione eventi calendario)
+- target "local": domande semplici gestibili senza un modello pesante. Quando target è
+  "local", specialist deve essere uno tra:
+  - "weather": meteo
+  - "search": ricerca web rapida, notizie, informazioni generiche
+  - "time": che ore sono, che giorno è oggi
+  - "email_read": leggere le email
+  - "email_search": cercare email specifiche
+  - "calendar_read": leggere eventi calendario
+  - "calendar_create": creare un evento calendario
+  - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra
 - target "claude": richieste di coding, analisi di documenti, reasoning approfondito
+  (specialist non rilevante, usa "other")
 - target "chatgpt": richieste di browsing web complesso, creatività, generazione immagini
+  (specialist non rilevante, usa "other")
 - target "gemini": mai per testo puro (riservato alle immagini, gestite separatamente)
 
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "confidence": <0.0-1.0>}
+{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "confidence": <0.0-1.0>}
 """
 
 
@@ -85,9 +105,15 @@ def classify_intent(text: str, settings: Settings) -> dict:
         logger.warning("Groq ha restituito un target inatteso: %r", target)
         target = "local"
 
+    specialist = classification.get("specialist")
+    if target == "local" and specialist not in VALID_SPECIALISTS:
+        logger.warning("Groq ha restituito uno specialist inatteso: %r", specialist)
+        specialist = "other"
+
     return {
         "intent": classification.get("intent", "unknown"),
         "target": target,
+        "specialist": specialist if target == "local" else None,
         "confidence": float(classification.get("confidence", 0.0)),
     }
 
@@ -95,4 +121,4 @@ def classify_intent(text: str, settings: Settings) -> dict:
 def classify_image_message() -> dict:
     """Un messaggio con immagine allegata va sempre a Gemini (flusso 8.4),
     senza passare dal router Groq."""
-    return {"intent": "vision", "target": "gemini", "confidence": 1.0}
+    return {"intent": "vision", "target": "gemini", "specialist": None, "confidence": 1.0}

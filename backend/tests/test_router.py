@@ -39,18 +39,41 @@ def test_classify_intent_returns_parsed_classification():
     settings = _settings()
     with patch("app.router.requests.post") as mock_post:
         mock_post.return_value = _groq_response(
-            {"intent": "coding", "target": "claude", "confidence": 0.9}
+            {"intent": "coding", "target": "claude", "specialist": "other", "confidence": 0.9}
         )
         result = classify_intent("scrivi uno script", settings)
 
-    assert result == {"intent": "coding", "target": "claude", "confidence": 0.9}
+    assert result == {"intent": "coding", "target": "claude", "specialist": None, "confidence": 0.9}
+
+
+def test_classify_intent_returns_specialist_for_local_target():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "weather_query", "target": "local", "specialist": "weather", "confidence": 0.9}
+        )
+        result = classify_intent("che tempo fa", settings)
+
+    assert result["target"] == "local"
+    assert result["specialist"] == "weather"
+
+
+def test_classify_intent_falls_back_to_other_specialist_when_unexpected():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "boh", "target": "local", "specialist": "not-a-real-specialist", "confidence": 0.5}
+        )
+        result = classify_intent("qualcosa di strano", settings)
+
+    assert result["specialist"] == "other"
 
 
 def test_classify_intent_falls_back_to_local_on_invalid_target():
     settings = _settings()
     with patch("app.router.requests.post") as mock_post:
         mock_post.return_value = _groq_response(
-            {"intent": "vision", "target": "gemini", "confidence": 0.8}
+            {"intent": "vision", "target": "gemini", "specialist": "other", "confidence": 0.8}
         )
         result = classify_intent("descrivi questa foto", settings)
 
@@ -82,4 +105,9 @@ def test_classify_intent_raises_on_malformed_json():
 
 
 def test_classify_image_message_always_targets_gemini():
-    assert classify_image_message() == {"intent": "vision", "target": "gemini", "confidence": 1.0}
+    assert classify_image_message() == {
+        "intent": "vision",
+        "target": "gemini",
+        "specialist": None,
+        "confidence": 1.0,
+    }

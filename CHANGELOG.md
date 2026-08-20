@@ -3,6 +3,47 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fase 3: Integrazioni (parziale — ricerca e visione)
+
+### Added
+- `backend/app/search.py`: ricerca web (RF-003, specialist "search") via
+  `ddgs`, con `SearchError` esposto invece di far crashare la richiesta
+- `backend/app/vision.py`: analisi immagini (RF-011, flusso 8.4) via Gemini
+- `backend/app/router.py`: il router ora restituisce anche `specialist`
+  quando `target == "local"` (weather/search/time/email_read/email_search/
+  calendar_read/calendar_create/other) — necessario per smistare
+  effettivamente le richieste locali invece del segnaposto generico della
+  Fase 2
+- `backend/app/chat_service.py`: dispatch reale per gli specialisti "search"
+  e "time"; "weather" ed email/calendar restano segnaposto espliciti
+  (mancano `OPENWEATHER_API_KEY` e le credenziali OAuth Google)
+- 14 nuovi test (`test_search.py`, `test_vision.py`, aggiornamenti a
+  `test_router.py`/`test_chat_service.py`) — 39/39 passanti
+
+### Fixed
+- Il documento di progetto (sezione 6.3) indicava la libreria
+  `duckduckgo-search`; restituiva solo `RatelimitException` ad ogni
+  chiamata. Sostituita con `ddgs`, l'erede attivamente mantenuto dello
+  stesso progetto — vedi commento in `requirements.txt`
+- `ddgs` dichiara di richiedere `httpx>=0.28.1`, incompatibile con
+  `supabase-py` (`httpx<0.28`); pinnato `httpx==0.27.2`, verificato
+  funzionante con entrambi
+- Gemini 1.5 Flash (sezione 6.3) non esiste più; anche `gemini-2.5-flash`
+  (elencato dall'API) risulta "no longer available to new users" — l'errore
+  404 stesso indicava `gemini-3.6-flash` come sostituto
+- `gemini-3.6-flash` di default "pensa" prima di rispondere (~18s per
+  un'immagine banale nei test), incompatibile con il requisito non
+  negoziabile di 5s max sui servizi esterni. Impostato
+  `thinkingConfig.thinkingBudget: 128` (il valore 0, che disabiliterebbe il
+  reasoning, viene rifiutato con HTTP 400 da questo modello) — latenza
+  scesa a ~1s, verificato manualmente
+
+### Note
+- Meteo (RF-012) e Gmail/Calendar (RF-005→RF-010) restano da collegare:
+  servono `OPENWEATHER_API_KEY` e `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+  (quest'ultimo per l'intero flusso OAuth, non ancora implementato)
+- Non ancora ridistribuito su Render — verificato solo in locale finora
+
 ## [Unreleased] — Deploy: Render
 
 ### Added

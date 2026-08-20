@@ -46,7 +46,7 @@ def test_process_message_delegation_target_builds_copy_and_open_action():
 
     with patch(
         "app.chat_service.classify_intent",
-        return_value={"intent": "coding", "target": "claude", "confidence": 0.9},
+        return_value={"intent": "coding", "target": "claude", "specialist": None, "confidence": 0.9},
     ):
         result = process_message(
             db, settings, text="scrivi uno script", image_base64=None, conversation_id=None
@@ -65,7 +65,12 @@ def test_process_message_local_target_has_no_action():
 
     with patch(
         "app.chat_service.classify_intent",
-        return_value={"intent": "weather_query", "target": "local", "confidence": 0.9},
+        return_value={
+            "intent": "weather_query",
+            "target": "local",
+            "specialist": "weather",
+            "confidence": 0.9,
+        },
     ):
         result = process_message(
             db, settings, text="che tempo fa", image_base64=None, conversation_id=None
@@ -73,7 +78,84 @@ def test_process_message_local_target_has_no_action():
 
     assert result["action"] is None
     assert result["assistant_message"]["action_type"] is None
-    assert "weather_query" in result["assistant_message"]["content"]
+    assert "meteo" in result["assistant_message"]["content"]
+
+
+def test_process_message_time_specialist_answers_directly():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "what_time", "target": "local", "specialist": "time", "confidence": 0.9},
+    ):
+        result = process_message(
+            db, settings, text="che ore sono", image_base64=None, conversation_id=None
+        )
+
+    assert "Sono le" in result["assistant_message"]["content"]
+
+
+def test_process_message_search_specialist_uses_web_search():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    fake_results = [{"title": "T1", "snippet": "S1", "url": "https://example.com"}]
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "web_search", "target": "local", "specialist": "search", "confidence": 0.9},
+    ), patch("app.chat_service.web_search", return_value=fake_results):
+        result = process_message(
+            db, settings, text="cerca notizie SpaceX", image_base64=None, conversation_id=None
+        )
+
+    assert "T1" in result["assistant_message"]["content"]
+    assert "https://example.com" in result["assistant_message"]["content"]
+
+
+def test_process_message_search_specialist_handles_search_error():
+    from app.search import SearchError
+
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "web_search", "target": "local", "specialist": "search", "confidence": 0.9},
+    ), patch("app.chat_service.web_search", side_effect=SearchError("rate limited")):
+        result = process_message(
+            db, settings, text="cerca notizie SpaceX", image_base64=None, conversation_id=None
+        )
+
+    assert "non disponibile" in result["assistant_message"]["content"]
+
+
+def test_process_message_image_uses_vision():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch("app.chat_service.analyze_image", return_value="È una fattura Enel di 50 euro."):
+        result = process_message(
+            db, settings, text="", image_base64="ZmFrZS1pbWFnZQ==", conversation_id=None
+        )
+
+    assert result["assistant_message"]["target"] == "gemini"
+    assert "fattura" in result["assistant_message"]["content"]
+    assert result["action"] is None
+
+
+def test_process_message_image_handles_vision_error():
+    from app.vision import VisionError
+
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch("app.chat_service.analyze_image", side_effect=VisionError("quota esaurita")):
+        result = process_message(
+            db, settings, text="", image_base64="ZmFrZS1pbWFnZQ==", conversation_id=None
+        )
+
+    assert "Non sono riuscito" in result["assistant_message"]["content"]
 
 
 def test_process_message_router_error_falls_back_to_local():
