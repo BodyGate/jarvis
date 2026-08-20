@@ -60,7 +60,18 @@ def create_event(
     location: str = "",
     description: str = "",
 ) -> str:
-    """RF-010. `start`/`end` in formato RFC3339 con timezone."""
+    """RF-010. `start`/`end` in formato RFC3339. L'API Calendar richiede un
+    fuso orario esplicito (offset nella stringa, oppure il campo
+    `timeZone`): quando `start`/`end` non lo includono già (nessun `+`, `-`
+    dopo l'ora, o `Z` finale), si assume UTC — coerente con il resto del
+    progetto, che non ha un fuso orario utente configurabile."""
+    start_field = {"dateTime": start}
+    end_field = {"dateTime": end}
+    if not (start.endswith("Z") or "+" in start[10:] or "-" in start[10:]):
+        start_field["timeZone"] = "UTC"
+    if not (end.endswith("Z") or "+" in end[10:] or "-" in end[10:]):
+        end_field["timeZone"] = "UTC"
+
     try:
         response = requests.post(
             CALENDAR_BASE,
@@ -69,8 +80,8 @@ def create_event(
                 "summary": summary,
                 "description": description,
                 "location": location,
-                "start": {"dateTime": start},
-                "end": {"dateTime": end},
+                "start": start_field,
+                "end": end_field,
             },
             timeout=settings.external_service_timeout_seconds,
         )

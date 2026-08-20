@@ -92,7 +92,23 @@ def test_create_event_returns_id():
     assert event_id == "evt-1"
     sent_json = mock_post.call_args.kwargs["json"]
     assert sent_json["summary"] == "Dentista"
-    assert sent_json["start"] == {"dateTime": "2026-08-22T17:00:00"}
+    assert sent_json["start"] == {"dateTime": "2026-08-22T17:00:00", "timeZone": "UTC"}
+
+
+def test_create_event_respects_explicit_timezone_offset():
+    settings = _settings()
+    resp = _resp({"id": "evt-2"})
+    with patch("app.calendar_service.requests.post", return_value=resp) as mock_post:
+        create_event(
+            "token",
+            settings,
+            summary="X",
+            start="2026-08-22T17:00:00+02:00",
+            end="2026-08-22T18:00:00+02:00",
+        )
+
+    sent_json = mock_post.call_args.kwargs["json"]
+    assert sent_json["start"] == {"dateTime": "2026-08-22T17:00:00+02:00"}
 
 
 def test_create_event_raises_on_network_error():
