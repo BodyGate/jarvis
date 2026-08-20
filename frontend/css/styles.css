@@ -1015,6 +1015,17 @@ input::placeholder {
   color: var(--text-primary-2);
 }
 
+.jv-site-link {
+  display: block;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.jv-site-link:hover {
+  color: var(--active-dot);
+  text-decoration: underline;
+}
+
 .jv-panel-project-select {
   width: 100%;
   margin-bottom: 13px;

@@ -72,6 +72,9 @@
           <button id="library-btn" class="jv-icon-btn" type="button" title="Libreria">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h4a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H4V4Zm16 0h-4a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H20V4Z"/></svg>
           </button>
+          <button id="sites-btn" class="jv-icon-btn" type="button" title="Siti Web">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm7.94 9h-3.02a15.6 15.6 0 0 0-1.14-5.4A8.03 8.03 0 0 1 19.94 11ZM12 4.06c.82 1.1 1.8 3 2.1 6.94H9.9c.3-3.94 1.28-5.84 2.1-6.94ZM9.9 13h4.2c-.3 3.94-1.28 5.84-2.1 6.94-.82-1.1-1.8-3-2.1-6.94ZM8.22 5.6A15.6 15.6 0 0 0 7.08 11H4.06A8.03 8.03 0 0 1 8.22 5.6ZM4.06 13h3.02c.14 2.1.55 3.9 1.14 5.4A8.03 8.03 0 0 1 4.06 13Zm11.72 5.4c.59-1.5 1-3.3 1.14-5.4h3.02a8.03 8.03 0 0 1-4.16 5.4Z"/></svg>
+          </button>
           <button id="tts-btn" class="jv-icon-btn active" type="button" title="Disattiva voce risposte">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05A4.49 4.49 0 0 0 16.5 12ZM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77Z"/></svg>
           </button>
@@ -166,6 +169,22 @@
             <button type="submit" class="jv-action-btn primary">Crea</button>
           </form>
           <div id="projects-list" class="jv-library-list"></div>
+        </div>
+      </div>
+
+      <!-- Sezione Siti Web: link salvati dall'utente -->
+      <div id="sites-overlay" class="jv-modal-overlay" hidden>
+        <div class="jv-modal">
+          <div class="jv-panel-top">
+            <span class="jv-label-mono">Siti Web</span>
+            <button id="sites-close-btn" class="jv-chip-btn" type="button">ESC</button>
+          </div>
+          <form id="site-create-form" class="jv-project-create">
+            <input id="site-url-input" type="url" placeholder="https://..." autocomplete="off" />
+            <input id="site-title-input" type="text" placeholder="Titolo (opzionale)" autocomplete="off" />
+            <button type="submit" class="jv-action-btn primary">Salva</button>
+          </form>
+          <div id="sites-list" class="jv-library-list"></div>
         </div>
       </div>
 

@@ -227,3 +227,21 @@ CREATE INDEX IF NOT EXISTS idx_device_agents_user
     ON device_agents(user_id);
 
 ALTER TABLE device_agents ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- Tabella: saved_sites
+-- Sezione "Siti Web": link salvati dall'utente (terzo dei tre moduli
+-- organizzativi richiesti, dopo Progetti e Libreria).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS saved_sites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL DEFAULT 'default',
+    url TEXT NOT NULL,
+    title TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_sites_user
+    ON saved_sites(user_id);
+
+ALTER TABLE saved_sites ENABLE ROW LEVEL SECURITY;

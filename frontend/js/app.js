@@ -56,6 +56,13 @@ const projectsListEl = $("projects-list");
 const projectCreateForm = $("project-create-form");
 const projectNameInput = $("project-name-input");
 const panelProjectSelect = $("jv-panel-project");
+const sitesBtn = $("sites-btn");
+const sitesOverlay = $("sites-overlay");
+const sitesCloseBtn = $("sites-close-btn");
+const sitesListEl = $("sites-list");
+const siteCreateForm = $("site-create-form");
+const siteUrlInput = $("site-url-input");
+const siteTitleInput = $("site-title-input");
 
 let scene = null;
 let socket = null;
@@ -791,6 +798,75 @@ panelProjectSelect.addEventListener("change", async () => {
     body: JSON.stringify({ project_id: projectId }),
   });
   if (ok) await refreshConversations();
+});
+
+// ---------- Siti Web (link salvati) ----------
+
+function renderSitesList(sites) {
+  sitesListEl.innerHTML = "";
+  if (!sites.length) {
+    const empty = document.createElement("div");
+    empty.className = "jv-library-empty";
+    empty.textContent = "Nessun sito salvato ancora.";
+    sitesListEl.appendChild(empty);
+    return;
+  }
+  for (const s of sites) {
+    const item = document.createElement("div");
+    item.className = "jv-library-item";
+    item.innerHTML = `<div class="jv-library-item-body">
+        <a class="jv-project-item-name jv-site-link" target="_blank" rel="noopener"></a>
+        <div class="jv-library-item-meta"></div>
+      </div>
+      <button type="button" class="jv-library-item-delete" title="Rimuovi">&times;</button>`;
+    const link = item.querySelector(".jv-site-link");
+    link.href = s.url;
+    link.textContent = s.title || s.url;
+    item.querySelector(".jv-library-item-meta").textContent = s.title ? s.url : formatWhen(s.created_at);
+    item.querySelector(".jv-library-item-delete").addEventListener("click", async () => {
+      const { ok } = await api(`/api/sites/${s.id}`, { method: "DELETE" });
+      if (ok) item.remove();
+      if (ok && !sitesListEl.children.length) renderSitesList([]);
+    });
+    sitesListEl.appendChild(item);
+  }
+}
+
+async function openSites() {
+  sitesOverlay.hidden = false;
+  const { ok, body } = await api("/api/sites");
+  renderSitesList(ok && body?.data ? body.data.sites : []);
+}
+
+function closeSites() {
+  sitesOverlay.hidden = true;
+}
+
+sitesBtn.addEventListener("click", openSites);
+sitesCloseBtn.addEventListener("click", closeSites);
+sitesOverlay.addEventListener("click", (e) => {
+  if (e.target === sitesOverlay) closeSites();
+});
+
+siteCreateForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const url = siteUrlInput.value.trim();
+  if (!url) return;
+  const title = siteTitleInput.value.trim();
+  const { ok, body } = await api("/api/sites", {
+    method: "POST",
+    body: JSON.stringify({ url, title: title || undefined }),
+  });
+  if (ok) {
+    siteUrlInput.value = "";
+    siteTitleInput.value = "";
+    const { body: listBody } = await api("/api/sites");
+    renderSitesList(listBody?.data?.sites || []);
+  } else if (body?.error) {
+    siteUrlInput.setCustomValidity("URL non valido (deve iniziare con http:// o https://)");
+    siteUrlInput.reportValidity();
+    siteUrlInput.setCustomValidity("");
+  }
 });
 
 // ---------- Google ----------

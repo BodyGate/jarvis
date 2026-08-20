@@ -3,6 +3,25 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Sezione Siti Web (3/3): link salvati
+
+Terzo e ultimo dei moduli organizzativi richiesti dall'utente (Progetti,
+Libreria, Siti Web). Nuova tabella `saved_sites`, stesso pattern UI/backend
+delle due sezioni precedenti per coerenza.
+
+### Added
+- `backend/db/migrations/0001_initial_schema.sql`: tabella `saved_sites`,
+  applicata al progetto Supabase reale
+- `backend/app/site_routes.py`: `GET/POST /api/sites`,
+  `DELETE /api/sites/<id>`, validazione server-side dell'URL (deve iniziare
+  per `http://`/`https://` — blocca schemi come `javascript:`)
+- `frontend/index.html` + `js/app.js` + `css/styles.css`: pannello Siti Web
+  (nuovo pulsante nella status bar), salvataggio con titolo opzionale, link
+  cliccabili, cancellazione per riga
+- 10 nuovi test (`test_site_routes.py`), 229/229 passanti nel modulo
+  `backend/tests`; verificato anche dal vivo in locale (creazione,
+  validazione URL non valido rifiutata, cancellazione)
+
 ## [Unreleased] — Sezione Progetti (2/3): raggruppare conversazioni correlate
 
 Secondo dei tre moduli organizzativi richiesti dall'utente. Nuova tabella
