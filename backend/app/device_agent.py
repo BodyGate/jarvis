@@ -114,21 +114,32 @@ def _authenticate(db: Client, token: Optional[str]) -> Optional[str]:
     return None
 
 
+_last_connect_error: Optional[str] = None  # diagnostica temporanea, vedi TODO in fondo al file
+
+
 def authenticate_connection(auth: Optional[dict]) -> bool:
     """Chiamata dall'handler `connect` di Socket.IO per i client privi di
     sessione browser valida — cioè un agente locale."""
-    token = (auth or {}).get("token") if isinstance(auth, dict) else None
-    settings = current_app.config["JARVIS_SETTINGS"]
-    db = get_supabase_client(settings)
-    device_id = _authenticate(db, token)
-    if device_id is None:
-        return False
+    global _last_connect_error
+    try:
+        token = (auth or {}).get("token") if isinstance(auth, dict) else None
+        settings = current_app.config["JARVIS_SETTINGS"]
+        db = get_supabase_client(settings)
+        device_id = _authenticate(db, token)
+        if device_id is None:
+            return False
 
-    _connected_devices[device_id] = request.sid
-    _sid_to_device[request.sid] = device_id
-    db.table("device_agents").update({"last_seen_at": _now_iso()}).eq("id", device_id).execute()
-    logger.info("Device agent collegato: %s", device_id)
-    return True
+        _connected_devices[device_id] = request.sid
+        _sid_to_device[request.sid] = device_id
+        db.table("device_agents").update({"last_seen_at": _now_iso()}).eq("id", device_id).execute()
+        logger.info("Device agent collegato: %s", device_id)
+        return True
+    except Exception:
+        import traceback
+
+        _last_connect_error = traceback.format_exc()
+        logger.exception("authenticate_connection ha sollevato un'eccezione")
+        return False
 
 
 def handle_disconnect() -> None:
