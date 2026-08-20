@@ -43,19 +43,41 @@ def test_classify_intent_returns_parsed_classification():
         )
         result = classify_intent("scrivi uno script", settings)
 
-    assert result == {"intent": "coding", "target": "claude", "specialist": None, "confidence": 0.9}
+    assert result == {
+        "intent": "coding",
+        "target": "claude",
+        "specialist": None,
+        "city": None,
+        "date_range": None,
+        "event_title": None,
+        "event_date": None,
+        "event_time": None,
+        "confidence": 0.9,
+    }
 
 
 def test_classify_intent_returns_specialist_for_local_target():
     settings = _settings()
     with patch("app.router.requests.post") as mock_post:
         mock_post.return_value = _groq_response(
-            {"intent": "weather_query", "target": "local", "specialist": "weather", "confidence": 0.9}
+            {"intent": "weather_query", "target": "local", "specialist": "weather", "city": "Roma", "confidence": 0.9}
         )
-        result = classify_intent("che tempo fa", settings)
+        result = classify_intent("che tempo fa a Roma", settings)
 
     assert result["target"] == "local"
     assert result["specialist"] == "weather"
+    assert result["city"] == "Roma"
+
+
+def test_classify_intent_ignores_city_for_non_weather_specialist():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "web_search", "target": "local", "specialist": "search", "city": "Roma", "confidence": 0.9}
+        )
+        result = classify_intent("cerca qualcosa su Roma", settings)
+
+    assert result["city"] is None
 
 
 def test_classify_intent_falls_back_to_other_specialist_when_unexpected():
@@ -104,10 +126,47 @@ def test_classify_intent_raises_on_malformed_json():
             classify_intent("qualsiasi cosa", settings)
 
 
+def test_classify_intent_defaults_calendar_read_range_to_today():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {"intent": "read_events", "target": "local", "specialist": "calendar_read", "confidence": 0.9}
+        )
+        result = classify_intent("cosa ho in programma", settings)
+
+    assert result["date_range"] == "today"
+
+
+def test_classify_intent_extracts_calendar_create_fields():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "create_event",
+                "target": "local",
+                "specialist": "calendar_create",
+                "event_title": "Dentista",
+                "event_date": "2026-08-22",
+                "event_time": "17:00",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("aggiungi appuntamento dal dentista venerdì alle 17", settings)
+
+    assert result["event_title"] == "Dentista"
+    assert result["event_date"] == "2026-08-22"
+    assert result["event_time"] == "17:00"
+
+
 def test_classify_image_message_always_targets_gemini():
     assert classify_image_message() == {
         "intent": "vision",
         "target": "gemini",
         "specialist": None,
+        "city": None,
+        "date_range": None,
+        "event_title": None,
+        "event_date": None,
+        "event_time": None,
         "confidence": 1.0,
     }

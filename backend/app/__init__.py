@@ -10,9 +10,13 @@ from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 
 from app.auth import auth_bp
+from app.calendar_routes import calendar_bp
 from app.chat_routes import chat_bp
 from app.config import load_settings
+from app.email_routes import email_bp
 from app.extensions import limiter, socketio
+from app.google_auth_routes import google_auth_bp
+from app.utility_routes import utility_bp
 
 # Route pubbliche: le uniche raggiungibili senza sessione valida (ADR-0002).
 _PUBLIC_API_PATHS = {"/api/health", "/api/session/login", "/api/session/status"}
@@ -37,6 +41,10 @@ def create_app(env_file: str | None = None) -> Flask:
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(utility_bp)
+    app.register_blueprint(google_auth_bp)
+    app.register_blueprint(email_bp)
+    app.register_blueprint(calendar_bp)
 
     from app import sockets as _sockets  # noqa: F401  (registra gli handler sull'istanza socketio)
 

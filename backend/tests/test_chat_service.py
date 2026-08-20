@@ -59,7 +59,122 @@ def test_process_message_delegation_target_builds_copy_and_open_action():
     assert result["assistant_message"]["action_type"] == "copy_and_open"
 
 
-def test_process_message_local_target_has_no_action():
+def test_process_message_email_read_without_google_connected():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "read_inbox",
+            "target": "local",
+            "specialist": "email_read",
+            "city": None,
+            "confidence": 0.9,
+        },
+    ):
+        result = process_message(
+            db, settings, text="leggimi le email", image_base64=None, conversation_id=None
+        )
+
+    assert result["action"] is None
+    assert result["assistant_message"]["action_type"] is None
+    assert "Google non è collegato" in result["assistant_message"]["content"]
+
+
+def test_process_message_email_read_lists_messages():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "read_inbox", "target": "local", "specialist": "email_read", "confidence": 0.9},
+    ), patch("app.chat_service.ensure_valid_access_token", return_value="at"), patch(
+        "app.chat_service.list_messages",
+        return_value=[{"from": "Marco", "subject": "Ciao", "snippet": "come va?"}],
+    ):
+        result = process_message(
+            db, settings, text="leggimi le email", image_base64=None, conversation_id=None
+        )
+
+    assert "Marco" in result["assistant_message"]["content"]
+
+
+def test_process_message_calendar_read_lists_events():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "read_events",
+            "target": "local",
+            "specialist": "calendar_read",
+            "date_range": "tomorrow",
+            "confidence": 0.9,
+        },
+    ), patch("app.chat_service.ensure_valid_access_token", return_value="at"), patch(
+        "app.chat_service.list_events",
+        return_value=[{"start": "2026-08-21T09:00:00", "summary": "Riunione", "location": ""}],
+    ):
+        result = process_message(
+            db, settings, text="cosa ho domani", image_base64=None, conversation_id=None
+        )
+
+    assert "Riunione" in result["assistant_message"]["content"]
+
+
+def test_process_message_calendar_create_builds_event():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "create_event",
+            "target": "local",
+            "specialist": "calendar_create",
+            "event_title": "Dentista",
+            "event_date": "2026-08-22",
+            "event_time": "17:00",
+            "confidence": 0.9,
+        },
+    ), patch("app.chat_service.ensure_valid_access_token", return_value="at"), patch(
+        "app.chat_service.create_event", return_value="evt123"
+    ) as mock_create:
+        result = process_message(
+            db, settings, text="aggiungi dentista venerdì alle 17", image_base64=None, conversation_id=None
+        )
+
+    assert "Dentista" in result["assistant_message"]["content"]
+    assert "22/08/2026" in result["assistant_message"]["content"]
+    mock_create.assert_called_once()
+
+
+def test_process_message_calendar_create_without_title_asks_to_repeat():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "create_event",
+            "target": "local",
+            "specialist": "calendar_create",
+            "event_title": None,
+            "event_date": None,
+            "event_time": "09:00",
+            "confidence": 0.5,
+        },
+    ):
+        result = process_message(
+            db, settings, text="aggiungi un evento", image_base64=None, conversation_id=None
+        )
+
+    assert "ripetere" in result["assistant_message"]["content"]
+
+
+def test_process_message_weather_specialist_uses_get_weather():
     db = FakeSupabaseClient()
     settings = _settings()
 
@@ -69,6 +184,32 @@ def test_process_message_local_target_has_no_action():
             "intent": "weather_query",
             "target": "local",
             "specialist": "weather",
+            "city": "Roma",
+            "confidence": 0.9,
+        },
+    ), patch(
+        "app.chat_service.get_weather",
+        return_value={"city": "Roma", "temp": 27, "description": "cielo sereno"},
+    ):
+        result = process_message(
+            db, settings, text="che tempo fa a Roma", image_base64=None, conversation_id=None
+        )
+
+    assert "Roma" in result["assistant_message"]["content"]
+    assert "27" in result["assistant_message"]["content"]
+
+
+def test_process_message_weather_specialist_without_city_asks_for_one():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "weather_query",
+            "target": "local",
+            "specialist": "weather",
+            "city": None,
             "confidence": 0.9,
         },
     ):
@@ -76,9 +217,30 @@ def test_process_message_local_target_has_no_action():
             db, settings, text="che tempo fa", image_base64=None, conversation_id=None
         )
 
-    assert result["action"] is None
-    assert result["assistant_message"]["action_type"] is None
-    assert "meteo" in result["assistant_message"]["content"]
+    assert "città" in result["assistant_message"]["content"]
+
+
+def test_process_message_weather_specialist_handles_weather_error():
+    from app.weather import WeatherError
+
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "weather_query",
+            "target": "local",
+            "specialist": "weather",
+            "city": "Roma",
+            "confidence": 0.9,
+        },
+    ), patch("app.chat_service.get_weather", side_effect=WeatherError("città non trovata")):
+        result = process_message(
+            db, settings, text="che tempo fa a Roma", image_base64=None, conversation_id=None
+        )
+
+    assert "non disponibile" in result["assistant_message"]["content"]
 
 
 def test_process_message_time_specialist_answers_directly():

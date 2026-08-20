@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
+from typing import Optional
 
 import requests
 
@@ -37,7 +39,13 @@ VALID_SPECIALISTS = {
     "other",
 }
 
-SYSTEM_PROMPT = """Sei il router di intenti di JARVIS, un assistente personale.
+def _build_system_prompt() -> str:
+    # La data corrente va iniettata ad ogni chiamata: il modello non la conosce
+    # (né dal training né altrimenti) e senza di essa non può risolvere
+    # riferimenti relativi come "domani" o "venerdì prossimo" (RF-010).
+    today = datetime.now().strftime("%A %d/%m/%Y")
+    return f"""Sei il router di intenti di JARVIS, un assistente personale.
+Oggi è {today}.
 Classifica il messaggio dell'utente in intent, target e specialist, seguendo queste regole:
 
 - target "local": domande semplici gestibili senza un modello pesante. Quando target è
@@ -56,8 +64,23 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
   (specialist non rilevante, usa "other")
 - target "gemini": mai per testo puro (riservato alle immagini, gestite separatamente)
 
+Quando specialist è "weather", estrai anche il nome della città menzionata
+(in italiano, es. "Roma", "Parigi") nel campo "city". Se l'utente non
+menziona nessuna città, usa null. Per ogni altro specialist, "city" è null.
+
+Quando specialist è "calendar_read", estrai in "date_range" uno tra
+"today", "tomorrow", "week" (default "today" se non specificato). Per ogni
+altro specialist, "date_range" è null.
+
+Quando specialist è "calendar_create", estrai:
+- "event_title": titolo breve dell'evento
+- "event_date": data assoluta in formato YYYY-MM-DD, risolta rispetto a
+  oggi (es. "venerdì" o "domani" → la data reale corrispondente)
+- "event_time": ora in formato HH:MM (24h), usa "09:00" se non specificata
+Per ogni altro specialist questi tre campi sono null.
+
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "confidence": <0.0-1.0>}
+{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "confidence": <0.0-1.0>}}
 """
 
 
@@ -75,7 +98,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _build_system_prompt()},
             {"role": "user", "content": text},
         ],
         "temperature": 0,
@@ -110,10 +133,28 @@ def classify_intent(text: str, settings: Settings) -> dict:
         logger.warning("Groq ha restituito uno specialist inatteso: %r", specialist)
         specialist = "other"
 
+    def _clean_str(value: object) -> Optional[str]:
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
+    city = _clean_str(classification.get("city"))
+    date_range = classification.get("date_range")
+    if date_range not in {"today", "tomorrow", "week"}:
+        date_range = "today"
+    event_title = _clean_str(classification.get("event_title"))
+    event_date = _clean_str(classification.get("event_date"))
+    event_time = _clean_str(classification.get("event_time")) or "09:00"
+
+    specialist = specialist if target == "local" else None
+
     return {
         "intent": classification.get("intent", "unknown"),
         "target": target,
-        "specialist": specialist if target == "local" else None,
+        "specialist": specialist,
+        "city": city if specialist == "weather" else None,
+        "date_range": date_range if specialist == "calendar_read" else None,
+        "event_title": event_title if specialist == "calendar_create" else None,
+        "event_date": event_date if specialist == "calendar_create" else None,
+        "event_time": event_time if specialist == "calendar_create" else None,
         "confidence": float(classification.get("confidence", 0.0)),
     }
 
@@ -121,4 +162,14 @@ def classify_intent(text: str, settings: Settings) -> dict:
 def classify_image_message() -> dict:
     """Un messaggio con immagine allegata va sempre a Gemini (flusso 8.4),
     senza passare dal router Groq."""
-    return {"intent": "vision", "target": "gemini", "specialist": None, "confidence": 1.0}
+    return {
+        "intent": "vision",
+        "target": "gemini",
+        "specialist": None,
+        "city": None,
+        "date_range": None,
+        "event_title": None,
+        "event_date": None,
+        "event_time": None,
+        "confidence": 1.0,
+    }

@@ -3,6 +3,49 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fase 3: Integrazioni (completata)
+
+### Added
+- Meteo (RF-012): `backend/app/weather.py` via OpenWeatherMap, con bias
+  `,IT` per disambiguare città omonime (`q=Roma` senza qualificatore
+  risolveva a Rome, NY, non Roma, Italia — verificato e corretto) e fallback
+  automatico se la città non esiste in Italia (per città estere tipo
+  "Parigi"). Nuovo endpoint `GET /api/weather?city=`
+- OAuth Google (RF-005→RF-010, flusso 8.2): `backend/app/google_oauth.py`
+  (authlib), `backend/app/token_crypto.py` (AES-256-GCM per i token, sezione
+  11.3), `backend/app/google_tokens_repo.py` (persistenza cifrata +
+  refresh automatico). Endpoint `GET /auth/google`, `GET /auth/callback`,
+  `GET /auth/status`, `POST /auth/revoke`
+- ADR-0006: `/auth/callback` non richiede la sessione app (cookie
+  `SameSite=Strict` bloccato sul redirect cross-site da Google) — protetto
+  invece da un cookie di stato dedicato `SameSite=Lax` con confronto a
+  tempo costante
+- Gmail (RF-005→RF-008): `backend/app/gmail.py` (lettura, ricerca,
+  creazione bozze con threading corretto su reply, invio). Endpoint
+  `GET /api/email/list`, `GET /api/email/search`, `GET /api/email/<id>`,
+  `POST /api/email/draft`, `POST /api/email/send`
+- Calendar (RF-009, RF-010): `backend/app/calendar_service.py` (lettura,
+  creazione, cancellazione eventi). Endpoint `GET /api/calendar/events`,
+  `POST /api/calendar/event`, `DELETE /api/calendar/event/<id>`
+- Router: estratti nuovi campi per gli specialist "calendar_read"
+  (`date_range`: today/tomorrow/week) e "calendar_create" (`event_title`,
+  `event_date`, `event_time`) — la data corrente viene iniettata nel prompt
+  di sistema ad ogni chiamata, altrimenti il modello non può risolvere
+  riferimenti relativi come "domani" o "venerdì"
+- 69 nuovi test (weather, token_crypto, google_oauth, google_tokens_repo,
+  google_auth_routes, gmail, calendar_service, email_routes,
+  calendar_routes) — 120/120 passanti nel modulo `backend/tests`
+
+### Note
+- Il flusso OAuth end-to-end (consenso reale su Google) richiede
+  un'interazione umana nel browser che non posso simulare da qui — sarà
+  verificato con l'utente contro l'istanza di produzione, l'unica con il
+  redirect URI registrato su Google Cloud Console
+- Gli intervalli "oggi"/"domani"/"settimana" per il calendario sono
+  calcolati sull'ora del server (UTC su Render), non sul fuso orario reale
+  dell'utente — lo schema del progetto non prevede un fuso orario utente
+  configurabile
+
 ## [Unreleased] — Fase 3: Integrazioni (parziale — ricerca e visione)
 
 ### Added
