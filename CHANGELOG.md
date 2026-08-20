@@ -3,6 +3,42 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Invio email via chat (RF-007/008)
+
+Primo passo verso un JARVIS che non solo risponde ma esegue azioni per conto
+dell'utente. L'invio è un'azione irreversibile e visibile a terzi, quindi il
+flusso richiede sempre una conferma esplicita prima di toccare l'API Gmail —
+nessun messaggio parte senza un'azione dell'utente.
+
+### Added
+- `backend/app/email_compose.py`: scrive oggetto e corpo dell'email via Groq
+  a partire dalla richiesta dell'utente (stesso principio di separazione già
+  usato da `local_chat.py` per lo specialist "other"). Include un retry
+  limitato (4 tentativi): il modello (`gpt-oss-20b`) rifiuta in modo non
+  deterministico di generare JSON valido quando il destinatario somiglia a
+  un indirizzo email reale — verificato empiricamente un tasso di rifiuto
+  del ~50% per tentativo contro l'API Groq reale, non un problema di prompt
+- `backend/app/router.py`: nuovo specialist "email_send", estrae il
+  destinatario esplicito dal messaggio (mai inventato)
+- `backend/app/chat_service.py`: `_handle_email_send()` crea una bozza Gmail
+  reale (riusa `create_draft()`, già esistente da Fase 3) e risponde con
+  un'azione `confirm_email_send` — l'invio vero avviene solo se l'utente
+  conferma dall'interfaccia, mai automaticamente
+- `frontend/js/app.js` + `css/styles.css`: la UI ora renderizza davvero le
+  azioni allegate ai messaggi (bottoni "Invia"/"Annulla" per l'email,
+  "Copia prompt"/"Apri" per la delega a Claude/ChatGPT) — prima il campo
+  `action` restituito dal backend veniva ignorato dal frontend, quindi la
+  delega a Claude/ChatGPT scoperta durante questo lavoro non aveva mai
+  avuto un modo per essere completata dall'interfaccia
+- Fix: la cronologia della conversazione veniva recuperata *dopo* aver
+  salvato il messaggio utente corrente, duplicandolo in ogni prompt costruito
+  a valle (risposta locale, delega, ora anche composizione email) — la
+  duplicazione è probabilmente la causa amplificata del tasso di rifiuto
+  osservato nella generazione email; corretto recuperando la cronologia
+  prima dell'insert
+- 12 nuovi test (`test_email_compose.py`, `test_chat_service.py`,
+  `test_router.py`), 164/164 passanti nel modulo `backend/tests`
+
 ## [Unreleased] — Cancellazione conversazioni via chat (richiesta dall'utente)
 
 L'utente ha segnalato che, chiedendo a JARVIS di eliminare vecchie

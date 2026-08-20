@@ -34,6 +34,7 @@ VALID_SPECIALISTS = {
     "time",
     "email_read",
     "email_search",
+    "email_send",
     "calendar_read",
     "calendar_create",
     "conversation_delete",
@@ -56,6 +57,8 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
   - "time": che ore sono, che giorno è oggi
   - "email_read": leggere le email
   - "email_search": cercare email specifiche
+  - "email_send": scrivere/inviare una nuova email a qualcuno (non per leggere
+    o cercare email esistenti — quelli sono "email_read"/"email_search")
   - "calendar_read": leggere eventi calendario
   - "calendar_create": creare un evento calendario
   - "conversation_delete": l'utente chiede esplicitamente di cancellare/eliminare
@@ -83,8 +86,13 @@ Quando specialist è "calendar_create", estrai:
 - "event_time": ora in formato HH:MM (24h), usa "09:00" se non specificata
 Per ogni altro specialist questi tre campi sono null.
 
+Quando specialist è "email_send", estrai in "email_to" l'indirizzo email del
+destinatario se è esplicitamente presente nel messaggio (es. "mario@esempio.com"),
+altrimenti null — non inventare un indirizzo. Per ogni altro specialist,
+"email_to" è null.
+
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "confidence": <0.0-1.0>}}
+{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "confidence": <0.0-1.0>}}
 """
 
 
@@ -147,6 +155,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
     event_title = _clean_str(classification.get("event_title"))
     event_date = _clean_str(classification.get("event_date"))
     event_time = _clean_str(classification.get("event_time")) or "09:00"
+    email_to = _clean_str(classification.get("email_to"))
 
     specialist = specialist if target == "local" else None
 
@@ -159,6 +168,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
         "event_title": event_title if specialist == "calendar_create" else None,
         "event_date": event_date if specialist == "calendar_create" else None,
         "event_time": event_time if specialist == "calendar_create" else None,
+        "email_to": email_to if specialist == "email_send" else None,
         "confidence": float(classification.get("confidence", 0.0)),
     }
 
@@ -175,5 +185,6 @@ def classify_image_message() -> dict:
         "event_title": None,
         "event_date": None,
         "event_time": None,
+        "email_to": None,
         "confidence": 1.0,
     }

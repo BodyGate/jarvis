@@ -52,6 +52,7 @@ let currentConversationId = null;
 let pendingImage = null;
 let requestToken = 0;
 let msgs = []; // trascritto visibile, max 2 — { who: 'you'|'jarvis', text }
+let pendingAction = null; // action_payload dell'ultimo messaggio assistant, o null
 
 const CAPTIONS = {
   idle: ["Standby", "tap the core or type"],
@@ -182,6 +183,7 @@ function escapeHtml(s) {
 
 async function selectConversation(id) {
   currentConversationId = id;
+  pendingAction = null;
   scene.select(id);
   renderSidebarRows();
   const { ok, body } = await api(`/api/chat/history?conversation_id=${id}`);
@@ -194,6 +196,7 @@ async function selectConversation(id) {
 
 function deselectConversation() {
   currentConversationId = null;
+  pendingAction = null;
   scene.deselect();
   renderSidebarRows();
   msgs = [];
@@ -272,11 +275,79 @@ function renderTranscript() {
     div.textContent = m.text;
     transcriptEl.appendChild(div);
   }
+  if (pendingAction) renderActionCard(pendingAction);
 }
 
 function pushTranscript(who, text) {
   msgs = [...msgs, { who, text }].slice(-2);
   renderTranscript();
+}
+
+// ---------- Azioni sul messaggio dell'assistente (conferma invio email, delega Claude/ChatGPT) ----------
+
+function clearPendingAction() {
+  pendingAction = null;
+  renderTranscript();
+}
+
+function renderActionCard(action) {
+  const card = document.createElement("div");
+  card.className = "jv-action";
+
+  if (action.type === "confirm_email_send") {
+    const send = document.createElement("button");
+    send.type = "button";
+    send.className = "jv-action-btn primary";
+    send.textContent = "Invia";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "jv-action-btn";
+    cancel.textContent = "Annulla";
+
+    send.addEventListener("click", async () => {
+      send.disabled = true;
+      cancel.disabled = true;
+      const { ok } = await api("/api/email/send", {
+        method: "POST",
+        body: JSON.stringify({ draft_id: action.draft_id }),
+      });
+      clearPendingAction();
+      pushTranscript("jarvis", ok ? "Email inviata." : "Invio non riuscito — riprova.");
+    });
+    cancel.addEventListener("click", () => {
+      clearPendingAction();
+      pushTranscript("jarvis", "Ok, non la invio.");
+    });
+
+    card.append(send, cancel);
+  } else if (action.type === "copy_and_open") {
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "jv-action-btn primary";
+    copy.textContent = "Copia prompt";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(action.prompt);
+        copy.textContent = "Copiato!";
+        setTimeout(() => (copy.textContent = "Copia prompt"), 1500);
+      } catch (_) {
+        /* clipboard non disponibile: l'utente può comunque aprire manualmente */
+      }
+    });
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "jv-action-btn";
+    open.textContent = "Apri " + (action.target === "claude" ? "Claude" : "ChatGPT");
+    open.addEventListener("click", () => window.open(action.url, "_blank", "noopener"));
+
+    card.append(copy, open);
+  } else {
+    return;
+  }
+
+  transcriptEl.appendChild(card);
 }
 
 // ---------- Voce (Web Speech API) ----------
@@ -450,6 +521,7 @@ async function sendMessage(text) {
   if (!text && !pendingImage) return;
 
   const myToken = ++requestToken;
+  pendingAction = null;
   pushTranscript("you", text || "[image]");
   activeBrainName = null; // il router non ha ancora deciso: nessun chip acceso
   setMode("processing");
@@ -473,6 +545,7 @@ async function sendMessage(text) {
   const msg = body.data.message;
   const brain = targetToBrain(msg.target);
   activeBrainName = brain;
+  pendingAction = body.data.action || null;
   pushTranscript("jarvis", msg.content);
   setMode("responding", brain + " is answering");
 

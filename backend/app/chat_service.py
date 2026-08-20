@@ -3,8 +3,10 @@ condivisa tra l'endpoint REST `/api/chat/message` e l'evento WebSocket
 `send_message` per evitare di duplicare la logica di persistenza e routing.
 
 Specialisti locali collegati (Fase 3): ricerca web (DuckDuckGo/ddgs), ora
-corrente, meteo, lettura/ricerca email e lettura/creazione eventi calendario
-(questi ultimi quattro richiedono Google collegato via `/auth/google`).
+corrente, meteo, lettura/ricerca/invio email e lettura/creazione eventi
+calendario (questi ultimi cinque richiedono Google collegato via
+`/auth/google`; l'invio email richiede conferma esplicita dall'utente
+tramite l'azione "confirm_email_send" prima di toccare `/api/email/send`).
 
 Nota: gli intervalli "today"/"tomorrow"/"week" per il calendario sono
 calcolati sull'ora del server (UTC su Render), non sul fuso orario reale
@@ -21,7 +23,8 @@ from supabase import Client
 from app.calendar_service import CalendarError, create_event, list_events
 from app.config import Settings
 from app.constants import DEFAULT_USER_ID
-from app.gmail import GmailError, list_messages
+from app.email_compose import EmailComposeError, compose_email
+from app.gmail import GmailError, create_draft, list_messages
 from app.google_oauth import GoogleOAuthError
 from app.google_tokens_repo import ensure_valid_access_token
 from app.local_chat import LocalChatError, generate_reply
@@ -131,6 +134,44 @@ def _handle_email_search(db: Client, user_text: str, settings: Settings) -> str:
     return "\n".join(lines)
 
 
+def _handle_email_send(
+    db: Client, email_to: Optional[str], user_text: str, context: list[dict], settings: Settings
+) -> tuple[str, Optional[dict]]:
+    """RF-007: prepara una bozza Gmail e chiede conferma esplicita prima di
+    inviarla — l'invio vero e proprio avviene solo se l'utente conferma
+    dall'interfaccia (POST /api/email/send), mai automaticamente da qui."""
+    if not email_to:
+        return "A chi devo inviarla? Dimmi l'indirizzo email del destinatario.", None
+
+    try:
+        drafted = compose_email(user_text, context, settings)
+    except EmailComposeError as exc:
+        return f"Non sono riuscito a scrivere il testo dell'email ({exc}).", None
+
+    try:
+        access_token = ensure_valid_access_token(db, settings)
+        draft_id = create_draft(
+            access_token, settings, to=email_to, subject=drafted["subject"], body=drafted["body"]
+        )
+    except GoogleOAuthError as exc:
+        return f"Google non è collegato ({exc}).", None
+    except GmailError as exc:
+        return f"Preparazione email non disponibile al momento ({exc}).", None
+
+    content = (
+        f"Ho preparato questa email per {email_to}:\n\n"
+        f"Oggetto: {drafted['subject']}\n\n{drafted['body']}\n\nConfermi l'invio?"
+    )
+    action_payload = {
+        "type": "confirm_email_send",
+        "draft_id": draft_id,
+        "to": email_to,
+        "subject": drafted["subject"],
+        "body": drafted["body"],
+    }
+    return content, action_payload
+
+
 def _calendar_range(date_range: str) -> tuple[str, str]:
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -214,21 +255,23 @@ def _handle_local_specialist(
     settings: Settings,
     known_facts: list[dict],
     has_active_conversation: bool,
-) -> str:
+) -> tuple[str, Optional[dict]]:
     specialist = classification.get("specialist") or "other"
     if specialist == "search":
-        return _handle_search(user_text, settings)
+        return _handle_search(user_text, settings), None
     if specialist == "time":
         now = datetime.now()
-        return f"Sono le {now.strftime('%H:%M')} del {now.strftime('%d/%m/%Y')}."
+        return f"Sono le {now.strftime('%H:%M')} del {now.strftime('%d/%m/%Y')}.", None
     if specialist == "weather":
-        return _handle_weather(classification.get("city"), settings)
+        return _handle_weather(classification.get("city"), settings), None
     if specialist == "email_read":
-        return _handle_email_read(db, settings)
+        return _handle_email_read(db, settings), None
     if specialist == "email_search":
-        return _handle_email_search(db, user_text, settings)
+        return _handle_email_search(db, user_text, settings), None
+    if specialist == "email_send":
+        return _handle_email_send(db, classification.get("email_to"), user_text, context, settings)
     if specialist == "calendar_read":
-        return _handle_calendar_read(db, classification.get("date_range") or "today", settings)
+        return _handle_calendar_read(db, classification.get("date_range") or "today", settings), None
     if specialist == "calendar_create":
         return _handle_calendar_create(
             db,
@@ -236,12 +279,12 @@ def _handle_local_specialist(
             classification.get("event_date"),
             classification.get("event_time") or "09:00",
             settings,
-        )
+        ), None
     if specialist == "conversation_delete":
-        return _handle_conversation_delete(has_active_conversation)
+        return _handle_conversation_delete(has_active_conversation), None
     # "other": richiesta locale che non rientra in nessuno specialista dedicato
     # (chiacchiere, domande generiche) — risposta reale via Groq, non un segnaposto.
-    return _handle_general_chat(user_text, context, settings, known_facts)
+    return _handle_general_chat(user_text, context, settings, known_facts), None
 
 
 def _build_assistant_reply(
@@ -292,11 +335,15 @@ def _build_assistant_reply(
         }
         return message_fields, action_payload
 
-    content = _handle_local_specialist(
+    content, local_action = _handle_local_specialist(
         db, classification, user_text, context, settings, known_facts, has_active_conversation
     )
-    message_fields = {"content": content, "action_type": None, "action_payload": None}
-    return message_fields, None
+    message_fields = {
+        "content": content,
+        "action_type": local_action["type"] if local_action else None,
+        "action_payload": local_action,
+    }
+    return message_fields, local_action
 
 
 def process_message(
@@ -317,6 +364,21 @@ def process_message(
     conversation = get_or_create_conversation(db, conversation_id, text or "Immagine")
     conv_id = conversation["id"]
     had_existing_conversation = conversation_id is not None
+
+    # Cronologia recuperata *prima* di inserire il messaggio utente corrente:
+    # ogni prompt costruito a valle (local_chat, delega Claude/ChatGPT,
+    # composizione email) riceve "context" più "user_text" come argomenti
+    # separati e li concatena da sé — se il messaggio corrente fosse già qui
+    # dentro finirebbe duplicato nel prompt, il che con l'email (che usa
+    # response_format json_object) può far rifiutare/rompere la risposta di
+    # Groq invece di limitarsi a una risposta un po' ridondante.
+    history_result = (
+        db.table("messages")
+        .select("role, content")
+        .eq("conversation_id", conv_id)
+        .order("created_at")
+        .execute()
+    )
 
     has_image = bool(image_base64)
     user_insert = (
@@ -345,14 +407,6 @@ def process_message(
                 "specialist": "other",
                 "confidence": 0.0,
             }
-
-    history_result = (
-        db.table("messages")
-        .select("role, content")
-        .eq("conversation_id", conv_id)
-        .order("created_at")
-        .execute()
-    )
 
     # RF-013: estrazione best-effort di nuovi fatti dal messaggio dell'utente,
     # usati subito anche nella risposta di questo stesso turno.

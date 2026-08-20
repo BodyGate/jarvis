@@ -599,6 +599,44 @@ input::placeholder {
   -webkit-backdrop-filter: blur(8px);
 }
 
+.jv-action {
+  align-self: flex-start;
+  max-width: 82%;
+  margin-top: -2px;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.jv-action-btn {
+  flex: 1 1 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  background: rgba(10, 15, 30, .74);
+  color: #dfe6ff;
+  transition: filter .15s;
+}
+
+.jv-action-btn:hover {
+  filter: brightness(1.2);
+}
+
+.jv-action-btn:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.jv-action-btn.primary {
+  background: linear-gradient(160deg, var(--send-a), var(--send-b));
+  border: none;
+  color: #06070f;
+}
+
 .jv-inputrow {
   display: flex;
   align-items: center;

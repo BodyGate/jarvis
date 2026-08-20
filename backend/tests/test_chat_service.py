@@ -69,6 +69,26 @@ def test_process_message_delegation_target_builds_copy_and_open_action():
     assert result["assistant_message"]["action_type"] == "copy_and_open"
 
 
+def test_process_message_delegation_prompt_does_not_duplicate_current_message():
+    """La cronologia passata a valle va recuperata *prima* di inserire il
+    messaggio utente corrente, altrimenti finisce duplicata nel prompt
+    (una volta come "contesto", una volta come "richiesta attuale") — bug
+    scoperto durante la verifica dello specialist email_send, dove la stessa
+    duplicazione arrivava a far rifiutare la risposta JSON di Groq."""
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "coding", "target": "claude", "specialist": None, "confidence": 0.9},
+    ):
+        result = process_message(
+            db, settings, text="scrivi uno script unico e riconoscibile", image_base64=None, conversation_id=None
+        )
+
+    assert result["action"]["prompt"].count("scrivi uno script unico e riconoscibile") == 1
+
+
 def test_process_message_email_read_without_google_connected():
     db = FakeSupabaseClient()
     settings = _settings()
@@ -159,6 +179,93 @@ def test_process_message_calendar_create_builds_event():
     assert "Dentista" in result["assistant_message"]["content"]
     assert "22/08/2026" in result["assistant_message"]["content"]
     mock_create.assert_called_once()
+
+
+def test_process_message_email_send_without_recipient_asks_for_one():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "send_email",
+            "target": "local",
+            "specialist": "email_send",
+            "email_to": None,
+            "confidence": 0.7,
+        },
+    ):
+        result = process_message(
+            db, settings, text="manda una mail per dire che arrivo tardi", image_base64=None, conversation_id=None
+        )
+
+    assert result["action"] is None
+    assert "A chi devo inviarla" in result["assistant_message"]["content"]
+
+
+def test_process_message_email_send_without_google_connected():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "send_email",
+            "target": "local",
+            "specialist": "email_send",
+            "email_to": "mario@esempio.com",
+            "confidence": 0.9,
+        },
+    ), patch(
+        "app.chat_service.compose_email",
+        return_value={"subject": "Ritardo", "body": "Arrivo tardi."},
+    ):
+        result = process_message(
+            db, settings, text="manda una mail a mario@esempio.com per dire che arrivo tardi",
+            image_base64=None, conversation_id=None,
+        )
+
+    assert result["action"] is None
+    assert "Google non è collegato" in result["assistant_message"]["content"]
+
+
+def test_process_message_email_send_creates_draft_and_asks_confirmation():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "send_email",
+            "target": "local",
+            "specialist": "email_send",
+            "email_to": "mario@esempio.com",
+            "confidence": 0.9,
+        },
+    ), patch(
+        "app.chat_service.compose_email",
+        return_value={"subject": "Ritardo riunione", "body": "Ciao Mario, arrivo con 10 minuti di ritardo."},
+    ), patch("app.chat_service.ensure_valid_access_token", return_value="at"), patch(
+        "app.chat_service.create_draft", return_value="draft123"
+    ) as mock_draft:
+        result = process_message(
+            db, settings, text="manda una mail a mario@esempio.com per dire che arrivo tardi",
+            image_base64=None, conversation_id=None,
+        )
+
+    mock_draft.assert_called_once_with(
+        "at", settings, to="mario@esempio.com", subject="Ritardo riunione",
+        body="Ciao Mario, arrivo con 10 minuti di ritardo.",
+    )
+    assert result["action"] == {
+        "type": "confirm_email_send",
+        "draft_id": "draft123",
+        "to": "mario@esempio.com",
+        "subject": "Ritardo riunione",
+        "body": "Ciao Mario, arrivo con 10 minuti di ritardo.",
+    }
+    assert result["assistant_message"]["action_type"] == "confirm_email_send"
+    assert "Confermi l'invio?" in result["assistant_message"]["content"]
 
 
 def test_process_message_calendar_create_without_title_asks_to_repeat():

@@ -52,6 +52,7 @@ def test_classify_intent_returns_parsed_classification():
         "event_title": None,
         "event_date": None,
         "event_time": None,
+        "email_to": None,
         "confidence": 0.9,
     }
 
@@ -78,6 +79,41 @@ def test_classify_intent_recognizes_conversation_delete():
         result = classify_intent("cancella questa conversazione", settings)
 
     assert result["specialist"] == "conversation_delete"
+
+
+def test_classify_intent_extracts_email_to_for_email_send():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "send_email",
+                "target": "local",
+                "specialist": "email_send",
+                "email_to": "mario@esempio.com",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("manda una mail a mario@esempio.com per dirgli che arrivo tardi", settings)
+
+    assert result["specialist"] == "email_send"
+    assert result["email_to"] == "mario@esempio.com"
+
+
+def test_classify_intent_ignores_email_to_for_non_email_send_specialist():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "read_email",
+                "target": "local",
+                "specialist": "email_read",
+                "email_to": "mario@esempio.com",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("leggi le mie email", settings)
+
+    assert result["email_to"] is None
 
 
 def test_classify_intent_ignores_city_for_non_weather_specialist():
@@ -179,5 +215,6 @@ def test_classify_image_message_always_targets_gemini():
         "event_title": None,
         "event_date": None,
         "event_time": None,
+        "email_to": None,
         "confidence": 1.0,
     }
