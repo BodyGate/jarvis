@@ -55,6 +55,7 @@ const projectsCloseBtn = $("projects-close-btn");
 const projectsListEl = $("projects-list");
 const projectCreateForm = $("project-create-form");
 const projectNameInput = $("project-name-input");
+const projectContextInput = $("project-context-input");
 const panelProjectSelect = $("jv-panel-project");
 const sitesBtn = $("sites-btn");
 const sitesOverlay = $("sites-overlay");
@@ -726,12 +727,24 @@ function renderProjectsList(projects) {
     item.innerHTML = `<div class="jv-library-item-body">
         <div class="jv-project-item-name"></div>
         <div class="jv-library-item-meta"></div>
+        <div class="jv-project-item-context" hidden></div>
+        <button type="button" class="jv-project-item-edit-btn">Modifica contesto</button>
       </div>
       <button type="button" class="jv-library-item-delete" title="Elimina progetto">&times;</button>`;
     item.querySelector(".jv-project-item-name").textContent = p.name;
     const count = p.conversation_count || 0;
     item.querySelector(".jv-library-item-meta").textContent =
       `${count} conversazion${count === 1 ? "e" : "i"}`;
+
+    const contextEl = item.querySelector(".jv-project-item-context");
+    if (p.context) {
+      contextEl.hidden = false;
+      contextEl.textContent = p.context;
+    }
+
+    const editBtn = item.querySelector(".jv-project-item-edit-btn");
+    editBtn.addEventListener("click", () => openProjectContextEditor(item, p));
+
     item.querySelector(".jv-library-item-delete").addEventListener("click", async () => {
       const { ok } = await api(`/api/projects/${p.id}`, { method: "DELETE" });
       if (ok) {
@@ -742,6 +755,24 @@ function renderProjectsList(projects) {
     });
     projectsListEl.appendChild(item);
   }
+}
+
+function openProjectContextEditor(item, project) {
+  if (item.querySelector(".jv-project-item-edit-area")) return; // già aperto
+  const area = document.createElement("div");
+  area.className = "jv-project-item-edit-area";
+  area.innerHTML = `<textarea rows="2" placeholder="Contesto per JARVIS"></textarea>
+    <button type="button" class="jv-action-btn primary">Salva</button>`;
+  const textarea = area.querySelector("textarea");
+  textarea.value = project.context || "";
+  area.querySelector(".jv-action-btn").addEventListener("click", async () => {
+    const { ok } = await api(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ context: textarea.value.trim() }),
+    });
+    if (ok) renderProjectsList(await refreshProjects());
+  });
+  item.querySelector(".jv-library-item-body").appendChild(area);
 }
 
 async function refreshProjects() {
@@ -783,9 +814,14 @@ projectCreateForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = projectNameInput.value.trim();
   if (!name) return;
-  const { ok } = await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+  const context = projectContextInput.value.trim();
+  const { ok } = await api("/api/projects", {
+    method: "POST",
+    body: JSON.stringify({ name, context: context || undefined }),
+  });
   if (ok) {
     projectNameInput.value = "";
+    projectContextInput.value = "";
     renderProjectsList(await refreshProjects());
   }
 });

@@ -24,7 +24,7 @@ aprire siti/app sul PC collegato (se un dispositivo è collegato), eliminare
 conversazioni. Non hai accesso diretto a nessuna di queste funzioni in
 QUESTA risposta (gestite da specialisti dedicati): se l'utente ti chiede di
 farne una adesso, invitalo a riformulare la richiesta in modo diretto (es.
-"che tempo fa a Roma").{facts_block}"""
+"che tempo fa a Roma").{facts_block}{project_block}"""
 
 
 class LocalChatError(RuntimeError):
@@ -38,11 +38,25 @@ def _facts_block(known_facts: Optional[list[dict]]) -> str:
     return f"\n\nQuello che sai già su questo utente (RF-013, usalo se pertinente, non ripeterlo a pappagallo):\n{lines}"
 
 
-def generate_reply(text: str, context: list[dict], settings: Settings, known_facts: Optional[list[dict]] = None) -> str:
+def _project_block(project_context: Optional[dict]) -> str:
+    if not project_context or not project_context.get("context"):
+        return ""
+    return f"\n\nQuesta conversazione fa parte del progetto «{project_context['name']}». Contesto del progetto:\n{project_context['context']}"
+
+
+def generate_reply(
+    text: str,
+    context: list[dict],
+    settings: Settings,
+    known_facts: Optional[list[dict]] = None,
+    project_context: Optional[dict] = None,
+) -> str:
     if not settings.groq_api_key:
         raise LocalChatError("GROQ_API_KEY non configurata")
 
-    system_prompt = SYSTEM_PROMPT.format(facts_block=_facts_block(known_facts))
+    system_prompt = SYSTEM_PROMPT.format(
+        facts_block=_facts_block(known_facts), project_block=_project_block(project_context)
+    )
     messages = [{"role": "system", "content": system_prompt}]
     for msg in context[-10:]:
         role = "user" if msg.get("role") == "user" else "assistant"

@@ -39,6 +39,60 @@ def test_create_project_returns_it(tmp_path):
     assert project["name"] == "Casa nuova"
 
 
+def test_create_project_accepts_context(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.project_routes.get_supabase_client", return_value=db):
+        response = client.post("/api/projects", json={"name": "Casa nuova", "context": "Ristrutturazione bagno"})
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["project"]["context"] == "Ristrutturazione bagno"
+
+
+def test_update_project_context(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.project_routes.get_supabase_client", return_value=db):
+        created = client.post("/api/projects", json={"name": "Casa nuova"}).get_json()
+        project_id = created["data"]["project"]["id"]
+
+        response = client.patch(f"/api/projects/{project_id}", json={"context": "Nuovo contesto"})
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["project"]["context"] == "Nuovo contesto"
+
+
+def test_update_project_rejects_empty_body(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.project_routes.get_supabase_client", return_value=db):
+        created = client.post("/api/projects", json={"name": "Casa nuova"}).get_json()
+        project_id = created["data"]["project"]["id"]
+
+        response = client.patch(f"/api/projects/{project_id}", json={})
+
+    assert response.status_code == 400
+
+
+def test_update_project_returns_404_for_unknown_id(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.project_routes.get_supabase_client", return_value=db):
+        response = client.patch(
+            "/api/projects/00000000-0000-0000-0000-000000000000", json={"context": "x"}
+        )
+
+    assert response.status_code == 404
+
+
 def test_create_project_requires_name(tmp_path):
     from tests.fake_supabase import FakeSupabaseClient
 

@@ -89,6 +89,62 @@ def test_process_message_delegation_prompt_does_not_duplicate_current_message():
     assert result["action"]["prompt"].count("scrivi uno script unico e riconoscibile") == 1
 
 
+def test_process_message_injects_project_context_into_delegation_prompt():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    project = db.table("projects").insert({"user_id": "default", "name": "Casa nuova", "context": "Ristrutturazione bagno"}).execute()
+    project_id = project.data[0]["id"]
+    conv = db.table("conversations").insert({"user_id": "default", "project_id": project_id}).execute()
+    conv_id = conv.data[0]["id"]
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "coding", "target": "claude", "specialist": None, "confidence": 0.9},
+    ):
+        result = process_message(
+            db, settings, text="che piastrelle scelgo?", image_base64=None, conversation_id=conv_id
+        )
+
+    assert "Casa nuova" in result["action"]["prompt"]
+    assert "Ristrutturazione bagno" in result["action"]["prompt"]
+
+
+def test_process_message_injects_project_context_into_general_chat():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    project = db.table("projects").insert({"user_id": "default", "name": "Casa nuova", "context": "Ristrutturazione bagno"}).execute()
+    project_id = project.data[0]["id"]
+    conv = db.table("conversations").insert({"user_id": "default", "project_id": project_id}).execute()
+    conv_id = conv.data[0]["id"]
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok") as mock_reply:
+        process_message(db, settings, text="che colore scelgo?", image_base64=None, conversation_id=conv_id)
+
+    # FakeSupabaseClient.select() non filtra le colonne (a differenza di
+    # Postgres reale): controlliamo i campi rilevanti, non l'intero dict.
+    project_context = mock_reply.call_args.kwargs["project_context"]
+    assert project_context["name"] == "Casa nuova"
+    assert project_context["context"] == "Ristrutturazione bagno"
+
+
+def test_process_message_without_project_passes_none_project_context():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok") as mock_reply:
+        process_message(db, settings, text="ciao", image_base64=None, conversation_id=None)
+
+    assert mock_reply.call_args.kwargs["project_context"] is None
+
+
 def test_process_message_email_read_without_google_connected():
     db = FakeSupabaseClient()
     settings = _settings()

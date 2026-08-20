@@ -78,6 +78,38 @@ def test_generate_reply_without_known_facts_has_no_facts_section():
     assert "sai già su questo utente" not in system_prompt
 
 
+def test_generate_reply_includes_project_context_in_system_prompt():
+    settings = _settings()
+    project_context = {"name": "Casa nuova", "context": "Ristrutturazione del bagno, budget 5000€"}
+    with patch("app.local_chat.requests.post") as mock_post:
+        mock_post.return_value = _groq_response("ok")
+        generate_reply("che colore scelgo?", [], settings, project_context=project_context)
+
+    system_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "Casa nuova" in system_prompt
+    assert "Ristrutturazione del bagno, budget 5000€" in system_prompt
+
+
+def test_generate_reply_without_project_context_has_no_project_section():
+    settings = _settings()
+    with patch("app.local_chat.requests.post") as mock_post:
+        mock_post.return_value = _groq_response("ok")
+        generate_reply("ciao", [], settings)
+
+    system_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "progetto" not in system_prompt.lower()
+
+
+def test_generate_reply_ignores_project_without_context_text():
+    settings = _settings()
+    with patch("app.local_chat.requests.post") as mock_post:
+        mock_post.return_value = _groq_response("ok")
+        generate_reply("ciao", [], settings, project_context={"name": "Senza contesto", "context": None})
+
+    system_prompt = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+    assert "Senza contesto" not in system_prompt
+
+
 def test_generate_reply_raises_without_api_key():
     settings = _settings(groq_api_key=None)
     with pytest.raises(LocalChatError):

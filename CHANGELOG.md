@@ -3,6 +3,31 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Contesto attivo per i progetti
+
+L'utente ha chiesto se i progetti avessero un campo descrizione/contesto:
+non ancora. Aggiunto — su richiesta esplicita, non solo testo visibile ma
+"contesto attivo": iniettato nei prompt di JARVIS (chat generica e delega a
+Claude) per ogni conversazione del progetto, così JARVIS "sa" di cosa
+tratta il progetto in ogni scambio, non solo nell'interfaccia.
+
+### Added
+- `backend/db/migrations/0001_initial_schema.sql`: colonna
+  `projects.context`, applicata al progetto Supabase reale
+- `backend/app/chat_service.py`: `_get_project_context()`, iniettato in
+  `_handle_general_chat` e nel prompt di delega a Claude
+- `backend/app/local_chat.py`: nuovo blocco di contesto progetto nel system
+  prompt, analogo a quello già esistente per i fatti di memoria (RF-013)
+- `backend/app/project_routes.py`: `POST /api/projects` accetta "context";
+  nuovo `PATCH /api/projects/<id>` per modificarlo dopo la creazione
+- `frontend`: form di creazione progetto con campo contesto, e modifica
+  inline del contesto sui progetti esistenti
+- 11 nuovi test, 239/239 passanti nel modulo `backend/tests`; verificato
+  anche dal vivo contro Groq reale — chiesto "qual è il mio budget e per
+  cosa lo sto usando?" in una conversazione di un progetto con contesto
+  "budget 5000€, ristrutturazione bagno" e la risposta lo ha riportato
+  correttamente
+
 ## [Unreleased] — Sezione Siti Web (3/3): link salvati
 
 Terzo e ultimo dei moduli organizzativi richiesti dall'utente (Progetti,

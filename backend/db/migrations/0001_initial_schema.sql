@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL DEFAULT 'default',
     name TEXT NOT NULL,
+    -- Iniettato come contesto attivo nei prompt di JARVIS per ogni
+    -- conversazione del progetto (richiesta esplicita dell'utente: non solo
+    -- una descrizione visibile, ma qualcosa che JARVIS "sa" durante la chat).
+    context TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -46,6 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_user
     ON projects(user_id);
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- Corregge la colonna per i database creati prima di questa modifica.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS context TEXT;
 
 -- ============================================================================
 -- Tabella: conversations

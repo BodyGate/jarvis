@@ -20,7 +20,7 @@ def list_projects():
 
     projects = (
         db.table("projects")
-        .select("id, name, created_at")
+        .select("id, name, context, created_at")
         .eq("user_id", DEFAULT_USER_ID)
         .order("created_at")
         .execute()
@@ -58,8 +58,48 @@ def create_project():
     name = (body.get("name") or "").strip()
     if not name:
         return jsonify({"success": False, "error": "name mancante"}), 400
+    context = (body.get("context") or "").strip() or None
 
-    result = db.table("projects").insert({"user_id": DEFAULT_USER_ID, "name": name}).execute()
+    result = (
+        db.table("projects")
+        .insert({"user_id": DEFAULT_USER_ID, "name": name, "context": context})
+        .execute()
+    )
+    return jsonify({"success": True, "data": {"project": result.data[0]}})
+
+
+@project_bp.route("/<project_id>", methods=["PATCH"])
+@login_required
+def update_project(project_id: str):
+    try:
+        uuid.UUID(project_id)
+    except ValueError:
+        return jsonify({"success": False, "error": f"project {project_id!r} non trovato"}), 404
+
+    body = request.get_json(silent=True) or {}
+    updates: dict = {}
+    if "name" in body:
+        name = (body.get("name") or "").strip()
+        if not name:
+            return jsonify({"success": False, "error": "name non può essere vuoto"}), 400
+        updates["name"] = name
+    if "context" in body:
+        updates["context"] = (body.get("context") or "").strip() or None
+    if not updates:
+        return jsonify({"success": False, "error": "nessun campo da aggiornare"}), 400
+
+    settings = current_app.config["JARVIS_SETTINGS"]
+    db = get_supabase_client(settings)
+
+    result = (
+        db.table("projects")
+        .update(updates)
+        .eq("id", project_id)
+        .eq("user_id", DEFAULT_USER_ID)
+        .execute()
+    )
+    if not result.data:
+        return jsonify({"success": False, "error": f"project {project_id!r} non trovato"}), 404
     return jsonify({"success": True, "data": {"project": result.data[0]}})
 
 

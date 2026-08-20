@@ -77,6 +77,23 @@ def get_or_create_conversation(db: Client, conversation_id: Optional[str], first
     return result.data[0]
 
 
+def _get_project_context(db: Client, project_id: Optional[str]) -> Optional[dict]:
+    """Contesto attivo del progetto (sezione Progetti): se la conversazione
+    appartiene a un progetto con un campo "context" compilato, viene
+    iniettato nei prompt di chat generica/delega — non solo mostrato
+    nell'interfaccia, richiesta esplicita dell'utente."""
+    if not project_id:
+        return None
+    result = (
+        db.table("projects")
+        .select("name, context")
+        .eq("id", project_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
 def _touch_conversation(db: Client, conversation_id: str) -> None:
     from datetime import datetime, timezone
 
@@ -277,9 +294,15 @@ def _handle_calendar_create(
     return f"Aggiunto «{title}» il {start_dt.strftime('%d/%m/%Y')} alle {start_dt.strftime('%H:%M')}."
 
 
-def _handle_general_chat(user_text: str, context: list[dict], settings: Settings, known_facts: list[dict]) -> str:
+def _handle_general_chat(
+    user_text: str,
+    context: list[dict],
+    settings: Settings,
+    known_facts: list[dict],
+    project_context: Optional[dict],
+) -> str:
     try:
-        return generate_reply(user_text, context, settings, known_facts=known_facts)
+        return generate_reply(user_text, context, settings, known_facts=known_facts, project_context=project_context)
     except LocalChatError as exc:
         return f"Non sono riuscito a generare una risposta ({exc})."
 
@@ -303,6 +326,7 @@ def _handle_local_specialist(
     settings: Settings,
     known_facts: list[dict],
     has_active_conversation: bool,
+    project_context: Optional[dict],
 ) -> tuple[str, Optional[dict]]:
     specialist = classification.get("specialist") or "other"
     if specialist == "search":
@@ -336,7 +360,7 @@ def _handle_local_specialist(
         return _handle_conversation_delete(has_active_conversation, classification.get("delete_scope") or "current"), None
     # "other": richiesta locale che non rientra in nessuno specialista dedicato
     # (chiacchiere, domande generiche) — risposta reale via Groq, non un segnaposto.
-    return _handle_general_chat(user_text, context, settings, known_facts), None
+    return _handle_general_chat(user_text, context, settings, known_facts, project_context), None
 
 
 def _build_assistant_reply(
@@ -348,6 +372,7 @@ def _build_assistant_reply(
     image_base64: Optional[str],
     known_facts: list[dict],
     has_active_conversation: bool,
+    project_context: Optional[dict],
 ) -> tuple[dict, Optional[dict]]:
     """Ritorna (campi_messaggio_assistant, action_payload_o_None)."""
     target = classification["target"]
@@ -361,7 +386,11 @@ def _build_assistant_reply(
         return message_fields, None
 
     if target in DELEGATION_URLS:
-        prompt_lines = ["Contesto conversazione:"]
+        prompt_lines = []
+        if project_context and project_context.get("context"):
+            prompt_lines.append(f"Contesto del progetto «{project_context['name']}»: {project_context['context']}")
+            prompt_lines.append("")
+        prompt_lines.append("Contesto conversazione:")
         for msg in context[-10:]:
             speaker = "Utente" if msg["role"] == "user" else "JARVIS"
             prompt_lines.append(f"{speaker}: {msg['content']}")
@@ -388,7 +417,7 @@ def _build_assistant_reply(
         return message_fields, action_payload
 
     content, local_action = _handle_local_specialist(
-        db, classification, user_text, context, settings, known_facts, has_active_conversation
+        db, classification, user_text, context, settings, known_facts, has_active_conversation, project_context
     )
     message_fields = {
         "content": content,
@@ -416,6 +445,7 @@ def process_message(
     conversation = get_or_create_conversation(db, conversation_id, text or "Immagine")
     conv_id = conversation["id"]
     had_existing_conversation = conversation_id is not None
+    project_context = _get_project_context(db, conversation.get("project_id"))
 
     # Cronologia recuperata *prima* di inserire il messaggio utente corrente:
     # ogni prompt costruito a valle (local_chat, delega Claude/ChatGPT,
@@ -477,6 +507,7 @@ def process_message(
         image_base64,
         known_facts,
         had_existing_conversation,
+        project_context,
     )
 
     assistant_insert = (
