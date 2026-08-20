@@ -49,6 +49,13 @@ const libraryBtn = $("library-btn");
 const libraryOverlay = $("library-overlay");
 const libraryCloseBtn = $("library-close-btn");
 const libraryListEl = $("library-list");
+const projectsBtn = $("projects-btn");
+const projectsOverlay = $("projects-overlay");
+const projectsCloseBtn = $("projects-close-btn");
+const projectsListEl = $("projects-list");
+const projectCreateForm = $("project-create-form");
+const projectNameInput = $("project-name-input");
+const panelProjectSelect = $("jv-panel-project");
 
 let scene = null;
 let socket = null;
@@ -121,7 +128,8 @@ function conversationsToBodies(convs) {
     return {
       id: c.id,
       name: c.title || "Untitled",
-      kind: "chat", // nessun concetto di "progetto" nello schema attuale
+      kind: "chat",
+      projectId: c.project_id || null,
       rel: computeRelevance(c, maxMsgCount),
       msgs: msgCount,
       when: formatWhen(c.updated_at),
@@ -227,6 +235,8 @@ function renderPanel(data) {
   panelBrainDotEl.style.background = brainDef.color;
   panelBrainDotEl.style.boxShadow = `0 0 9px 2px ${brainDef.color}66`;
   panelBrainEl.textContent = "ROUTED VIA " + data.brain.toUpperCase();
+  populatePanelProjectSelect();
+  panelProjectSelect.value = data.projectId || "";
 }
 
 // ---------- Status bar: chip dei modelli ----------
@@ -601,6 +611,7 @@ async function showChat() {
   setMode("idle");
   renderBrainChips();
   await refreshConversations(false);
+  await refreshProjects();
   registerServiceWorker();
   messageInput.focus();
 }
@@ -687,6 +698,99 @@ libraryBtn.addEventListener("click", openLibrary);
 libraryCloseBtn.addEventListener("click", closeLibrary);
 libraryOverlay.addEventListener("click", (e) => {
   if (e.target === libraryOverlay) closeLibrary();
+});
+
+// ---------- Progetti (raggruppare conversazioni correlate) ----------
+
+let cachedProjects = [];
+
+function renderProjectsList(projects) {
+  projectsListEl.innerHTML = "";
+  if (!projects.length) {
+    const empty = document.createElement("div");
+    empty.className = "jv-library-empty";
+    empty.textContent = "Nessun progetto ancora — creane uno qui sopra.";
+    projectsListEl.appendChild(empty);
+    return;
+  }
+  for (const p of projects) {
+    const item = document.createElement("div");
+    item.className = "jv-library-item";
+    item.innerHTML = `<div class="jv-library-item-body">
+        <div class="jv-project-item-name"></div>
+        <div class="jv-library-item-meta"></div>
+      </div>
+      <button type="button" class="jv-library-item-delete" title="Elimina progetto">&times;</button>`;
+    item.querySelector(".jv-project-item-name").textContent = p.name;
+    const count = p.conversation_count || 0;
+    item.querySelector(".jv-library-item-meta").textContent =
+      `${count} conversazion${count === 1 ? "e" : "i"}`;
+    item.querySelector(".jv-library-item-delete").addEventListener("click", async () => {
+      const { ok } = await api(`/api/projects/${p.id}`, { method: "DELETE" });
+      if (ok) {
+        item.remove();
+        await refreshProjects();
+        if (!projectsListEl.children.length) renderProjectsList([]);
+      }
+    });
+    projectsListEl.appendChild(item);
+  }
+}
+
+async function refreshProjects() {
+  const { ok, body } = await api("/api/projects");
+  cachedProjects = ok && body?.data ? body.data.projects : [];
+  populatePanelProjectSelect();
+  return cachedProjects;
+}
+
+function populatePanelProjectSelect() {
+  const current = panelProjectSelect.value;
+  panelProjectSelect.innerHTML = '<option value="">Nessuno</option>';
+  for (const p of cachedProjects) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    panelProjectSelect.appendChild(opt);
+  }
+  panelProjectSelect.value = current;
+}
+
+async function openProjects() {
+  projectsOverlay.hidden = false;
+  const projects = await refreshProjects();
+  renderProjectsList(projects);
+}
+
+function closeProjects() {
+  projectsOverlay.hidden = true;
+}
+
+projectsBtn.addEventListener("click", openProjects);
+projectsCloseBtn.addEventListener("click", closeProjects);
+projectsOverlay.addEventListener("click", (e) => {
+  if (e.target === projectsOverlay) closeProjects();
+});
+
+projectCreateForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = projectNameInput.value.trim();
+  if (!name) return;
+  const { ok } = await api("/api/projects", { method: "POST", body: JSON.stringify({ name }) });
+  if (ok) {
+    projectNameInput.value = "";
+    renderProjectsList(await refreshProjects());
+  }
+});
+
+panelProjectSelect.addEventListener("change", async () => {
+  if (!currentConversationId) return;
+  const projectId = panelProjectSelect.value || null;
+  const { ok } = await api(`/api/chat/conversations/${currentConversationId}/project`, {
+    method: "PUT",
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  if (ok) await refreshConversations();
 });
 
 // ---------- Google ----------

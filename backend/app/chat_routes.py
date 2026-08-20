@@ -151,3 +151,37 @@ def delete_conversation(conversation_id: str):
         return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non trovata"}), 404
 
     return jsonify({"success": True})
+
+
+@chat_bp.route("/conversations/<conversation_id>/project", methods=["PUT"])
+@login_required
+def assign_conversation_project(conversation_id: str):
+    """Assegna (o rimuove, con project_id null) una conversazione a un
+    progetto — sezione "Progetti"."""
+    try:
+        uuid.UUID(conversation_id)
+    except ValueError:
+        return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non trovata"}), 404
+
+    body = request.get_json(silent=True) or {}
+    project_id = body.get("project_id")
+    if project_id is not None:
+        try:
+            uuid.UUID(project_id)
+        except ValueError:
+            return jsonify({"success": False, "error": f"project_id {project_id!r} non valido"}), 400
+
+    settings = current_app.config["JARVIS_SETTINGS"]
+    db = get_supabase_client(settings)
+
+    result = (
+        db.table("conversations")
+        .update({"project_id": project_id})
+        .eq("id", conversation_id)
+        .eq("user_id", DEFAULT_USER_ID)
+        .execute()
+    )
+    if not result.data:
+        return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non trovata"}), 404
+
+    return jsonify({"success": True, "data": {"conversation": result.data[0]}})

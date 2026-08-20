@@ -98,3 +98,64 @@ def test_delete_conversation_returns_404_for_non_uuid_id(tmp_path):
         response = client.delete("/api/chat/conversations/does-not-exist")
 
     assert response.status_code == 404
+
+
+def test_assign_conversation_project_sets_project_id(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    conv_id = "11111111-1111-1111-1111-111111111111"
+    project_id = "22222222-2222-2222-2222-222222222222"
+    db = FakeSupabaseClient()
+    db.table("conversations").insert({"id": conv_id, "user_id": "default"}).execute()
+
+    client = _logged_in_client(tmp_path)
+    with patch("app.chat_routes.get_supabase_client", return_value=db):
+        response = client.put(f"/api/chat/conversations/{conv_id}/project", json={"project_id": project_id})
+
+    assert response.status_code == 200
+    stored = next(c for c in db._store["conversations"] if c["id"] == conv_id)
+    assert stored["project_id"] == project_id
+
+
+def test_assign_conversation_project_can_unassign_with_null(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    conv_id = "11111111-1111-1111-1111-111111111111"
+    db = FakeSupabaseClient()
+    db.table("conversations").insert({"id": conv_id, "user_id": "default", "project_id": "some-project"}).execute()
+
+    client = _logged_in_client(tmp_path)
+    with patch("app.chat_routes.get_supabase_client", return_value=db):
+        response = client.put(f"/api/chat/conversations/{conv_id}/project", json={"project_id": None})
+
+    assert response.status_code == 200
+    stored = next(c for c in db._store["conversations"] if c["id"] == conv_id)
+    assert stored["project_id"] is None
+
+
+def test_assign_conversation_project_returns_404_for_unknown_conversation(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.chat_routes.get_supabase_client", return_value=db):
+        response = client.put(
+            "/api/chat/conversations/00000000-0000-0000-0000-000000000000/project",
+            json={"project_id": None},
+        )
+
+    assert response.status_code == 404
+
+
+def test_assign_conversation_project_rejects_invalid_project_id(tmp_path):
+    from tests.fake_supabase import FakeSupabaseClient
+
+    conv_id = "11111111-1111-1111-1111-111111111111"
+    db = FakeSupabaseClient()
+    db.table("conversations").insert({"id": conv_id, "user_id": "default"}).execute()
+
+    client = _logged_in_client(tmp_path)
+    with patch("app.chat_routes.get_supabase_client", return_value=db):
+        response = client.put(f"/api/chat/conversations/{conv_id}/project", json={"project_id": "not-a-uuid"})
+
+    assert response.status_code == 400

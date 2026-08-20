@@ -66,6 +66,9 @@
         </div>
         <!-- Utility (non nel design originale: funzioni reali dell'app) -->
         <div class="jv-utility">
+          <button id="projects-btn" class="jv-icon-btn" type="button" title="Progetti">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6Z"/></svg>
+          </button>
           <button id="library-btn" class="jv-icon-btn" type="button" title="Libreria">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 4h4a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H4V4Zm16 0h-4a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H20V4Z"/></svg>
           </button>
@@ -141,11 +144,30 @@
         </div>
         <div class="jv-panel-gridlabel" style="margin-bottom:7px;">LUMINOSITY / RELEVANCE</div>
         <div class="jv-panel-relbar"><div id="jv-panel-relfill" class="jv-panel-relfill"></div></div>
+        <div class="jv-panel-gridlabel" style="margin-bottom:7px;">PROGETTO</div>
+        <select id="jv-panel-project" class="jv-panel-project-select">
+          <option value="">Nessuno</option>
+        </select>
         <div class="jv-panel-footer">
           <span id="jv-panel-brain-dot" class="jv-dot"></span>
           <span id="jv-panel-brain" class="jv-panel-brain"></span>
         </div>
       </aside>
+
+      <!-- Sezione Progetti: raggruppare conversazioni correlate -->
+      <div id="projects-overlay" class="jv-modal-overlay" hidden>
+        <div class="jv-modal">
+          <div class="jv-panel-top">
+            <span class="jv-label-mono">Progetti</span>
+            <button id="projects-close-btn" class="jv-chip-btn" type="button">ESC</button>
+          </div>
+          <form id="project-create-form" class="jv-project-create">
+            <input id="project-name-input" type="text" placeholder="Nome nuovo progetto" autocomplete="off" />
+            <button type="submit" class="jv-action-btn primary">Crea</button>
+          </form>
+          <div id="projects-list" class="jv-library-list"></div>
+        </div>
+      </div>
 
       <!-- Sezione Libreria: fatti di memoria a lungo termine (RF-013),
            prima invisibili all'utente -->

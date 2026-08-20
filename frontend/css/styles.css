@@ -981,6 +981,57 @@ input::placeholder {
   filter: brightness(1.2);
 }
 
+/* ---------- Progetti ---------- */
+
+.jv-project-create {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.jv-project-create input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.jv-project-create input:focus {
+  outline: none;
+  border-color: var(--accent-a);
+}
+
+.jv-project-create .jv-action-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+}
+
+.jv-project-item-name {
+  font-size: 13px;
+  color: var(--text-primary-2);
+}
+
+.jv-panel-project-select {
+  width: 100%;
+  margin-bottom: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary-2);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.jv-panel-project-select:focus {
+  outline: none;
+  border-color: var(--accent-a);
+}
+
 /* ---------- Responsive (<900px, come da spec) ---------- */
 
 @media (max-width: 899px) {

@@ -31,6 +31,23 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
+-- Tabella: projects
+-- Sezione "Progetti": raggruppa conversazioni correlate. Creata prima di
+-- `conversations` perché quest'ultima la referenzia.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL DEFAULT 'default',
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user
+    ON projects(user_id);
+
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
 -- Tabella: conversations
 -- Raggruppa i thread di chat
 -- ============================================================================
@@ -38,6 +55,10 @@ CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL DEFAULT 'default',
     title TEXT,
+    -- ON DELETE SET NULL, non CASCADE: cancellare un progetto non deve
+    -- cancellare le conversazioni al suo interno, solo scollegarle (stessa
+    -- lezione già imparata con user_facts.source_message_id).
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -46,7 +67,14 @@ CREATE OR REPLACE TRIGGER trg_conversations_updated_at
 BEFORE UPDATE ON conversations
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE INDEX IF NOT EXISTS idx_conversations_project
+    ON conversations(project_id);
+
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+
+-- Corregge il vincolo/colonna per i database creati prima di questa
+-- modifica (CREATE TABLE IF NOT EXISTS non la applicherebbe retroattivamente).
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE SET NULL;
 
 -- ============================================================================
 -- Tabella: messages

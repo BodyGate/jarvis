@@ -3,6 +3,30 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Sezione Progetti (2/3): raggruppare conversazioni correlate
+
+Secondo dei tre moduli organizzativi richiesti dall'utente. Nuova tabella
+`projects`, nuova colonna `conversations.project_id` (ON DELETE SET NULL —
+cancellare un progetto scollega le conversazioni, non le cancella, stessa
+lezione già imparata con `user_facts.source_message_id`).
+
+### Added
+- `backend/db/migrations/0001_initial_schema.sql`: tabella `projects` +
+  colonna `conversations.project_id`, applicate al progetto Supabase reale
+- `backend/app/project_routes.py`: `GET/POST /api/projects`,
+  `DELETE /api/projects/<id>` (con conteggio conversazioni aggregato, stesso
+  pattern già usato per `message_count`)
+- `backend/app/chat_routes.py`: `PUT /api/chat/conversations/<id>/project`
+  per assegnare/rimuovere una conversazione da un progetto
+- `frontend/index.html` + `js/app.js` + `css/styles.css`: pannello Progetti
+  (nuovo pulsante nella status bar, crea/elenca/cancella progetti) e
+  selettore progetto nel pannello di dettaglio conversazione già esistente
+- 15 nuovi test (`test_project_routes.py`, `test_chat_routes.py`), 220/220
+  passanti nel modulo `backend/tests`; verificato anche dal vivo in locale
+  (creazione progetto, assegnazione/rimozione conversazione con conteggio
+  aggiornato in tempo reale, cancellazione progetto senza perdere la
+  conversazione)
+
 ## [Unreleased] — Sezione Libreria (1/3): fatti di memoria a lungo termine finalmente visibili
 
 L'utente ha chiesto un modulo organizzativo (Progetti, Libreria, Siti Web)
