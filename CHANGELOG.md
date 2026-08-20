@@ -3,6 +3,53 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fase 4: Frontend PWA
+
+### Added
+- PWA completa in `frontend/`: login, chat via WebSocket (con fallback REST
+  se il socket non è connesso), action card per la delega Claude/ChatGPT
+  (ADR-0003), upload immagini, input vocale e sintesi vocale (Web Speech
+  API), pulsante per collegare Google, nuova conversazione, logout
+- Tema "deep space HUD": fondale a nebulosa/stelle in CSS puro, pannelli in
+  vetro sfocato, bagliori sull'accento cyan della palette di progetto
+  (sezione 10.4), animazioni di ingresso messaggi, indicatore "sta
+  scrivendo" animato — nessun asset esterno oltre le icone generate
+  localmente
+- Service worker (`frontend/sw.js`, RNF-008/RF-014): cache dell'app shell
+  con strategia network-first (mai cache-first: servirebbe HTML/JS vecchi
+  dopo ogni deploy finché la cache non scade)
+- Icone PWA generate via script Python/Pillow (nessun asset esterno
+  scaricato), manifest already pronto dalla Fase 0
+- Libreria client Socket.IO vendorizzata in `frontend/js/vendor/` invece di
+  caricata da CDN a runtime — coerente con lo spirito "vanilla, zero
+  dipendenze esterne" di ADR-0001
+- Backend serve ora anche il frontend statico dallo stesso servizio Render
+  (`app/__init__.py`, `static_folder` puntato a `frontend/`) invece di un
+  secondo host separato, evitando CORS e un deploy in più per un progetto
+  single-user
+- `/auth/callback` ora reindirizza a `/?google=connected` (o `google=error`)
+  invece di restituire JSON grezzo, per una UX sensata dopo il consenso
+  Google
+
+### Fixed
+- L'attributo HTML `hidden` veniva silenziosamente ignorato su più elementi
+  (`.screen`, `.typing-indicator`, `.image-preview`) perché ogni regola
+  d'autore che imposta `display` batte lo user-agent stylesheet a parità di
+  specificità — il bug non era visibile ad occhio perché lo scroll
+  automatico al focus dell'input nascondeva la schermata di login
+  sovrapposta per coincidenza. Fix strutturale: `[hidden] { display: none
+  !important; }` una volta per tutte, invece di patch per singola classe
+
+### Note
+- Qualità della sintesi vocale non verificabile da questo ambiente: il
+  browser di test sandboxed espone zero voci di sistema (fallback
+  robotico). Il codice sceglie automaticamente la voce italiana migliore
+  disponibile sul dispositivo reale dell'utente (euristica su nome/motore),
+  con pulsante per disattivarla — da verificare su iOS Safari ed Edge/Windows
+- Verificato in locale (login, invio messaggi via WebSocket, action card,
+  routing verso Claude, responsive 320px→desktop); non ancora ridistribuito
+  su Render
+
 ## [Unreleased] — Fase 3: verifica end-to-end su account Google reale
 
 ### Fixed

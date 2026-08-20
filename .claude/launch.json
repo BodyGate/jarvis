@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jarvis-backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["backend/run.py"],
+      "port": 5000
+    }
+  ]
+}

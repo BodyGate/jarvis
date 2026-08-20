@@ -2,21 +2,120 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
   <title>JARVIS</title>
+  <meta name="description" content="Assistente personale multi-cervello" />
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#00d4ff" />
+  <link rel="icon" href="icons/favicon.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <!--
-    Shell PWA minimo (Fase 0). La chat UI (header, bolle messaggio, action card,
-    input con microfono/allegato) viene implementata in Fase 4, dopo che backend,
-    autenticazione e integrazioni sono pronti.
-  -->
-  <main>
-    <p>JARVIS — in costruzione.</p>
-  </main>
-  <script src="js/app.js"></script>
+  <div id="app">
+
+    <!-- Schermata di login (ADR-0002: password singola) -->
+    <section id="login-screen" class="screen">
+      <div class="login-card">
+        <div class="brand">
+          <img src="icons/icon-192.png" alt="" class="brand-mark" />
+          <h1>JARVIS</h1>
+        </div>
+        <p class="brand-tagline">Assistente personale multi-cervello</p>
+        <form id="login-form" autocomplete="off">
+          <label for="login-password" class="sr-only">Password</label>
+          <input
+            id="login-password"
+            type="password"
+            placeholder="Password"
+            autocomplete="current-password"
+            required
+          />
+          <button type="submit" id="login-submit">
+            <span class="btn-label">Accedi</span>
+            <span class="btn-spinner" hidden></span>
+          </button>
+        </form>
+        <p id="login-error" class="login-error" role="alert" hidden></p>
+      </div>
+    </section>
+
+    <!-- Interfaccia chat -->
+    <section id="chat-screen" class="screen" hidden>
+      <header class="chat-header">
+        <div class="header-identity">
+          <img src="icons/icon-192.png" alt="" class="header-avatar" />
+          <div class="header-text">
+            <span class="header-name">JARVIS</span>
+            <span class="header-status">
+              <span id="connection-dot" class="status-dot"></span>
+              <span id="connection-label">Connessione...</span>
+            </span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="tts-btn" class="icon-btn active" type="button" title="Disattiva voce risposte">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2A4.5 4.5 0 0 0 14 7.97v8.05A4.49 4.49 0 0 0 16.5 12ZM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77Z"/></svg>
+          </button>
+          <button id="google-btn" class="icon-btn" type="button" title="Collega Google">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12s3.36-7.27 7.19-7.27c3.08 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.19 2C6.42 2 2.03 6.8 2.03 12s4.39 10 10.16 10c5.05 0 9.81-3.55 9.81-10.36 0-.78-.15-1.54-.15-1.54Z"/></svg>
+          </button>
+          <button id="new-chat-btn" class="icon-btn" type="button" title="Nuova conversazione">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button id="logout-btn" class="icon-btn" type="button" title="Esci">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M10 17v-2H4V9h6V7l5 5-5 5Zm-6 3q-.825 0-1.412-.587Q2 18.825 2 18V6q0-.825.588-1.413Q3.175 4 4 4h8v2H4v12h8v2Z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="messages" class="messages" aria-live="polite"></main>
+
+      <div id="typing-indicator" class="typing-indicator" hidden>
+        <span></span><span></span><span></span>
+      </div>
+
+      <footer class="input-area">
+        <div id="image-preview" class="image-preview" hidden>
+          <img id="image-preview-img" src="" alt="Immagine allegata" />
+          <button id="image-preview-remove" type="button" aria-label="Rimuovi immagine">&times;</button>
+        </div>
+        <form id="message-form">
+          <button id="attach-btn" type="button" class="icon-btn" title="Allega immagine">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6Z"/></svg>
+          </button>
+          <input id="image-input" type="file" accept="image/*" hidden />
+          <textarea
+            id="message-input"
+            rows="1"
+            placeholder="Scrivi a JARVIS..."
+            autocomplete="off"
+          ></textarea>
+          <button id="mic-btn" type="button" class="icon-btn" title="Input vocale">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11Z"/></svg>
+          </button>
+          <button id="send-btn" type="submit" class="icon-btn send-btn" title="Invia">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8Z"/></svg>
+          </button>
+        </form>
+      </footer>
+    </section>
+
+  </div>
+
+  <template id="action-card-template">
+    <div class="action-card">
+      <div class="action-card-label"></div>
+      <div class="action-card-buttons">
+        <button type="button" class="action-open-btn" data-action="open"></button>
+        <button type="button" class="action-copy-btn" data-action="copy">Copia prompt</button>
+      </div>
+    </div>
+  </template>
+
+  <script src="js/vendor/socket.io.min.js" defer></script>
+  <script src="js/app.js" defer></script>
 </body>
 </html>

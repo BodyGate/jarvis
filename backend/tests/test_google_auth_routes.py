@@ -49,7 +49,8 @@ def test_callback_rejects_mismatched_state(tmp_path):
 
     response = client.get("/auth/callback?state=wrong-state&code=abc")
 
-    assert response.status_code == 400
+    assert response.status_code == 302
+    assert "google=error" in response.headers["Location"]
 
 
 def test_callback_rejects_missing_state_cookie(tmp_path):
@@ -57,7 +58,8 @@ def test_callback_rejects_missing_state_cookie(tmp_path):
 
     response = client.get("/auth/callback?state=some-state&code=abc")
 
-    assert response.status_code == 400
+    assert response.status_code == 302
+    assert "google=error" in response.headers["Location"]
 
 
 def test_callback_does_not_require_jarvis_session(tmp_path):
@@ -80,8 +82,8 @@ def test_callback_does_not_require_jarvis_session(tmp_path):
     ), patch("app.google_auth_routes.get_supabase_client"):
         response = client.get("/auth/callback?state=matching-state&code=abc")
 
-    assert response.status_code == 200
-    assert response.get_json()["success"] is True
+    assert response.status_code == 302
+    assert "google=connected" in response.headers["Location"]
 
 
 def test_status_requires_session(tmp_path):

@@ -4,9 +4,10 @@ ADR-0002 (autenticazione) e ADR-0005 (timeout sessione, rate limiting).
 """
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, send_from_directory, session
 from flask_cors import CORS
 
 from app.auth import auth_bp
@@ -21,11 +22,19 @@ from app.utility_routes import utility_bp
 # Route pubbliche: le uniche raggiungibili senza sessione valida (ADR-0002).
 _PUBLIC_API_PATHS = {"/api/health", "/api/session/login", "/api/session/status"}
 
+# frontend/ è una cartella sorella di backend/, non dentro il package Flask:
+# la PWA statica (Fase 4) e il backend restano deploy separabili nel
+# documento di progetto, ma qui vengono serviti dallo stesso servizio Render
+# per evitare un secondo host e problemi di CORS su un progetto single-user.
+_FRONTEND_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
+)
+
 
 def create_app(env_file: str | None = None) -> Flask:
     settings = load_settings(env_file=env_file)
 
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder=_FRONTEND_DIR, static_url_path="")
     app.config["JARVIS_SETTINGS"] = settings
     app.config["SECRET_KEY"] = settings.secret_key
 
@@ -62,5 +71,9 @@ def create_app(env_file: str | None = None) -> Flask:
     @app.route("/api/health", methods=["GET"])
     def health():
         return jsonify({"status": "ok"})
+
+    @app.route("/", methods=["GET"])
+    def index():
+        return send_from_directory(_FRONTEND_DIR, "index.html")
 
     return app

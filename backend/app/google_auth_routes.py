@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, redirect, request
 
@@ -48,6 +49,18 @@ def start():
     return response
 
 
+def _redirect_to_app(google_status: str, error: str | None = None):
+    """Il callback arriva dal redirect di Google, non da una fetch della SPA:
+    per una UX sensata rimanda alla pagina principale invece di mostrare
+    JSON grezzo. `app.js` legge `?google=` all'avvio per mostrare un feedback."""
+    params = f"google={google_status}"
+    if error:
+        params += f"&google_error={quote(error)}"
+    response = redirect(f"/?{params}")
+    response.delete_cookie(_STATE_COOKIE)
+    return response
+
+
 @google_auth_bp.route("/callback", methods=["GET"])
 def callback():
     settings = current_app.config["JARVIS_SETTINGS"]
@@ -57,33 +70,20 @@ def callback():
     valid_state = bool(expected_state) and secrets.compare_digest(expected_state, received_state)
 
     if not valid_state:
-        response = jsonify({"success": False, "error": "state OAuth non valido o scaduto"})
-        response.status_code = 400
-        response.delete_cookie(_STATE_COOKIE)
-        return response
+        return _redirect_to_app("error", "state OAuth non valido o scaduto")
 
     code = request.args.get("code")
     if not code:
-        response = jsonify(
-            {"success": False, "error": request.args.get("error", "codice di autorizzazione mancante")}
-        )
-        response.status_code = 400
-        response.delete_cookie(_STATE_COOKIE)
-        return response
+        return _redirect_to_app("error", request.args.get("error", "codice di autorizzazione mancante"))
 
     try:
         token = exchange_code(code, settings)
         db = get_supabase_client(settings)
         save_tokens(db, settings, token)
     except (GoogleOAuthError, ValueError) as exc:
-        response = jsonify({"success": False, "error": str(exc)})
-        response.status_code = 502
-        response.delete_cookie(_STATE_COOKIE)
-        return response
+        return _redirect_to_app("error", str(exc))
 
-    response = jsonify({"success": True, "data": {"message": "Google collegato con successo."}})
-    response.delete_cookie(_STATE_COOKIE)
-    return response
+    return _redirect_to_app("connected")
 
 
 @google_auth_bp.route("/status", methods=["GET"])
