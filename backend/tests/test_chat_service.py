@@ -636,6 +636,52 @@ def test_process_message_conversation_delete_removes_active_conversation():
     assert not any(m["conversation_id"] == conv_id for m in db._store["messages"])
 
 
+def test_process_message_conversation_delete_survives_db_error():
+    """Bug reale in produzione: cancellare una conversazione con fatti di
+    memoria (RF-013) associati falliva con un 500 grezzo per una violazione
+    del vincolo FK su `user_facts.source_message_id` (corretto nello schema
+    con ON DELETE SET NULL). Qui si verifica che, qualunque sia la causa, un
+    errore del DB durante la cancellazione non deve mai propagarsi come
+    eccezione non gestita — la conversazione resta semplicemente attiva."""
+    from tests.fake_supabase import FakeSupabaseClient, FakeTable
+
+    class _BrokenDeleteTable(FakeTable):
+        def delete(self):
+            raise RuntimeError("simulated FK violation")
+
+    class _DBWithBrokenConversationDelete(FakeSupabaseClient):
+        def table(self, name):
+            if name == "conversations":
+                return _BrokenDeleteTable(self._store, name)
+            return super().table(name)
+
+    db = _DBWithBrokenConversationDelete()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
+        first = process_message(db, settings, text="ciao", image_base64=None, conversation_id=None)
+    conv_id = first["conversation_id"]
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "delete_chat",
+            "target": "local",
+            "specialist": "conversation_delete",
+            "confidence": 0.9,
+        },
+    ):
+        result = process_message(
+            db, settings, text="elimina questa conversazione", image_base64=None, conversation_id=conv_id
+        )
+
+    assert result["conversation_id"] == conv_id
+    assert any(c["id"] == conv_id for c in db._store["conversations"])
+
+
 def test_process_message_conversation_delete_without_active_conversation():
     db = FakeSupabaseClient()
     settings = _settings()

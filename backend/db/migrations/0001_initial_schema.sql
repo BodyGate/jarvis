@@ -107,12 +107,23 @@ CREATE TABLE IF NOT EXISTS user_facts (
     category TEXT,             -- 'preference', 'contact', 'habit', 'work'
     fact TEXT NOT NULL,        -- "Odia il caffè", "Marco è il capo"
     confidence FLOAT DEFAULT 1.0 CHECK (confidence >= 0.0 AND confidence <= 1.0),
-    source_message_id UUID REFERENCES messages(id),
+    -- ON DELETE SET NULL (non la CASCADE di default): un fatto di memoria a
+    -- lungo termine deve sopravvivere alla cancellazione della conversazione
+    -- da cui è stato estratto — perde solo il riferimento alla fonte. Senza
+    -- questo, cancellare una conversazione con fatti associati falliva con
+    -- un 500 (violazione FK su messages, bug in produzione).
+    source_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_facts_category
     ON user_facts(user_id, category);
+
+-- Corregge il vincolo per i database creati prima di questa modifica
+-- (CREATE TABLE IF NOT EXISTS non lo applicherebbe retroattivamente).
+ALTER TABLE user_facts DROP CONSTRAINT IF EXISTS user_facts_source_message_id_fkey;
+ALTER TABLE user_facts ADD CONSTRAINT user_facts_source_message_id_fkey
+    FOREIGN KEY (source_message_id) REFERENCES messages(id) ON DELETE SET NULL;
 
 ALTER TABLE user_facts ENABLE ROW LEVEL SECURITY;
 

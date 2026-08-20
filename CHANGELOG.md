@@ -3,6 +3,36 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fix: cancellazione conversazione con fatti di memoria associati falliva con un 500
+
+Bug reale in produzione, segnalato dall'utente con uno screenshot ("Something
+went wrong — try again."): cancellare una conversazione da cui erano stati
+estratti fatti di memoria a lungo termine (RF-013, es. "Giuseppe beve il
+caffè") falliva con un errore 500 grezzo, pur avendo già salvato il
+messaggio di conferma ("Ok, elimino questa conversazione.") — la
+conversazione restava quindi visibile e non cancellata, con una risposta
+fuorviante già scritta in cronologia.
+
+Causa: `user_facts.source_message_id` referenzia `messages(id)` senza
+`ON DELETE CASCADE`. Cancellare la conversazione cancella in cascata i suoi
+messaggi (`messages.conversation_id ON DELETE CASCADE`), ma se un fatto
+referenzia ancora uno di quei messaggi, Postgres rifiuta l'intera
+cancellazione per violazione del vincolo FK — mai riprodotto nei test perché
+il doppio di test (`FakeSupabaseClient`) non applica vincoli FK reali.
+
+### Fixed
+- `backend/db/migrations/0001_initial_schema.sql`: `source_message_id` ora
+  `ON DELETE SET NULL` (un fatto di memoria deve sopravvivere alla
+  cancellazione della sua conversazione sorgente, perdendo solo il
+  riferimento), applicato anche al progetto Supabase reale
+- `backend/app/chat_service.py`: la cancellazione ora è avvolta in un
+  try/except — qualunque errore imprevisto del DB non deve mai propagarsi
+  come 500 grezzo; la conversazione resta semplicemente attiva
+- 1 nuovo test di regressione, 189/189 passanti nel modulo `backend/tests`;
+  riprodotto e verificato anche contro la produzione reale (stessa
+  conversazione dello screenshot dell'utente, cancellata con successo dopo
+  il fix)
+
 ## [Unreleased] — Agente locale companion sul PC (nuova funzionalità)
 
 Richiesta esplicita dell'utente: "voglio che si colleghi al dispositivo dove

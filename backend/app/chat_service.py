@@ -15,6 +15,7 @@ configurabile.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -34,6 +35,8 @@ from app.router import RouterError, classify_image_message, classify_intent
 from app.search import SearchError, web_search
 from app.vision import VisionError, analyze_image
 from app.weather import WeatherError, get_weather
+
+logger = logging.getLogger(__name__)
 
 DELEGATION_URLS = {
     "claude": "https://claude.ai/new",
@@ -474,13 +477,20 @@ def process_message(
         and had_existing_conversation
         and classification.get("specialist") == "conversation_delete"
     ):
-        db.table("conversations").delete().eq("id", conv_id).execute()
-        return {
-            "conversation_id": None,
-            "user_message": user_message,
-            "assistant_message": assistant_message,
-            "action": action_payload,
-        }
+        try:
+            db.table("conversations").delete().eq("id", conv_id).execute()
+        except Exception:
+            # Non deve mai arrivare un 500 grezzo all'utente per un errore
+            # del DB (es. un vincolo FK inatteso) — la conversazione resta
+            # attiva e lo si tratta come un turno normale.
+            logger.exception("Cancellazione conversazione %s fallita", conv_id)
+        else:
+            return {
+                "conversation_id": None,
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "action": action_payload,
+            }
 
     _touch_conversation(db, conv_id)
 
