@@ -3,6 +3,24 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fase 3: verifica end-to-end su account Google reale
+
+### Fixed
+- `create_event` (Calendar API) rifiutava con 400 Bad Request date/ore
+  senza fuso orario esplicito. Ora assume UTC quando l'offset non è già
+  presente nella stringa — verificato creando e cancellando un evento
+  reale sul calendario dell'utente
+
+### Verified
+- Flusso OAuth completo eseguito dall'utente su Google reale (dopo aver
+  aggiunto il proprio account come "test user" nella schermata di consenso,
+  necessario perché l'app Google Cloud è in modalità Testing — normale e
+  sufficiente per un uso personale, non serve la verifica completa di
+  Google)
+- Lettura email reali, lettura calendario e creazione/cancellazione evento
+  reale, tutti verificati in produzione con l'account Google effettivo
+  dell'utente
+
 ## [Unreleased] — Fase 3: Integrazioni (completata)
 
 ### Added
