@@ -3,6 +3,32 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Fix: domande generiche/sulle capacità di JARVIS delegate erroneamente a ChatGPT
+
+Segnalato dall'utente in produzione: "Cosa possiamo fare insieme?" (una
+domanda generica sulle capacità di JARVIS) veniva instradata a target
+"chatgpt" — l'utente si ritrovava a dover copiare un prompt e aprire
+ChatGPT per farsi rispondere cosa sa fare il proprio assistente. Il criterio
+del router per "claude"/"chatgpt" era troppo permissivo: bastava
+un'ambiguità perché il modello preferisse delegare piuttosto che rispondere
+da sé, anche per chiacchiere/domande su JARVIS stesso che rientrano
+chiaramente in "local"/"other".
+
+### Fixed
+- `backend/app/router.py`: criteri "claude"/"chatgpt" resi espliciti e
+  restrittivi (coding sostanziale/analisi documenti per Claude; solo
+  immagini o ricerca web approfondita per ChatGPT), istruzione esplicita di
+  preferire sempre "local" nel dubbio invece di delegare per default
+- `backend/app/local_chat.py`: il prompt della risposta locale ora descrive
+  le capacità reali di JARVIS (meteo, email, calendario, ricerca, memoria,
+  dispositivo collegato) invece di limitarsi a dire cosa non sa fare "in
+  questa risposta" — le domande sulle proprie capacità, ora correttamente
+  gestite in locale, ottengono così una risposta accurata invece che vaga
+- Verificato contro Groq reale: "Cosa possiamo fare insieme?", "Chi sei?",
+  "Cosa sai fare?" restano tutte locali con risposte accurate; richieste
+  genuine di coding/generazione immagini continuano a delegare
+  correttamente a Claude/ChatGPT
+
 ## [Unreleased] — Cancellazione di tutte le conversazioni + modello Groq più capace
 
 L'utente aveva chiesto ripetutamente "elimina tutte le conversazioni" (anche

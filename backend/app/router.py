@@ -72,12 +72,23 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
     una o più conversazioni/chat (es. "cancella questa conversazione",
     "elimina questa chat", "elimina tutte le conversazioni", "cancella tutta
     la cronologia") — non per cancellare un singolo messaggio o un'email
-  - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra
-- target "claude": richieste di coding, analisi di documenti, reasoning approfondito
-  (specialist non rilevante, usa "other")
-- target "chatgpt": richieste di browsing web complesso, creatività, generazione immagini
-  (specialist non rilevante, usa "other")
+  - "other": qualsiasi altra richiesta locale che non rientra nei casi sopra —
+    include SEMPRE chiacchiere, saluti, domande su di sé/sulle proprie
+    capacità ("cosa sai fare", "cosa possiamo fare insieme", "chi sei"),
+    opinioni, spiegazioni generiche, domande di cultura generale: JARVIS deve
+    rispondere da sé, mai delegare per questo genere di richieste
+- target "claude": SOLO richieste esplicite e sostanziali di scrivere/correggere/
+  spiegare codice, o di analizzare un documento/file allegato. Non usarlo per
+  domande generiche di programmazione che si possono spiegare a parole.
+- target "chatgpt": SOLO richieste esplicite di generare un'immagine, o di
+  cercare/riassumere informazioni molto recenti da più fonti web in modo
+  approfondito (non una semplice ricerca — quella è "search" locale).
 - target "gemini": mai per testo puro (riservato alle immagini, gestite separatamente)
+
+Nel dubbio tra "local"/"other" e una delega a "claude"/"chatgpt", scegli
+SEMPRE "local"/"other": la delega apre un servizio esterno con un
+copia-incolla manuale, va riservata solo ai casi in cui è chiaramente
+indispensabile, non usata come risposta di default per l'incertezza.
 
 Quando specialist è "weather", estrai anche il nome della città menzionata
 (in italiano, es. "Roma", "Parigi") nel campo "city". Se l'utente non
