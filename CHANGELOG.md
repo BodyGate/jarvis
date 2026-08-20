@@ -3,6 +3,36 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Deploy: Render
+
+### Added
+- Repository pubblicato (privato) su [github.com/BodyGate/jarvis](https://github.com/BodyGate/jarvis)
+  — necessario per il deploy via Blueprint di Render
+- `render.yaml`: Blueprint del servizio `jarvis-backend` (piano free,
+  `rootDir: backend`, Python 3.12.7)
+- Deploy live su `https://jarvis-backend-wx9x.onrender.com`, verificato
+  end-to-end (health, login, chat con routing verso Claude) contro Supabase
+  e Groq reali
+
+### Fixed
+- `gunicorn` senza `--bind 0.0.0.0:$PORT` ascoltava sulla porta di default,
+  irraggiungibile dal proxy di Render (le richieste restavano appese senza
+  risposta, TLS incluso)
+- Le variabili d'ambiente segrete (`SECRET_KEY`, `SUPABASE_KEY`, ecc.),
+  inserite più volte dalla dashboard Render, non risultavano mai salvate sul
+  servizio (verificato interrogando `GET /v1/services/{id}/env-vars` via API
+  Render: erano presenti solo le 3 variabili con valore fisso in
+  `render.yaml`). Impostate con successo scrivendo direttamente via API
+  (`PUT /v1/services/{id}/env-vars`) — causa della dashboard non identificata
+
+### Note
+- `GOOGLE_REDIRECT_URI` di produzione impostato su
+  `https://jarvis-backend-wx9x.onrender.com/auth/callback` (Fase 3, quando
+  configureremo `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`)
+- Piano free Render: l'istanza va in sleep dopo inattività (richieste
+  successive più lente finché non si risveglia) — comportamento atteso,
+  RNF-001 lo tollera già
+
 ## [Unreleased] — Fase 2: Backend Core
 
 ### Added
