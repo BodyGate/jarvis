@@ -3,6 +3,41 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Agente locale companion sul PC (nuova funzionalità)
+
+Richiesta esplicita dell'utente: "voglio che si colleghi al dispositivo dove
+è installato per poterlo gestire". Discusso l'ambito prima di implementare:
+un browser/PWA non può eseguire comandi di sistema o gestire file per
+design (barriera di sicurezza del sandbox, non un limite di impegno), quindi
+sul telefono restano solo notifiche/azioni web (non ancora implementate).
+Sul PC, in accordo con l'utente, si è scartato l'accesso ampio (comandi/file
+arbitrari dettati in linguaggio naturale) per il rischio reale di eseguire
+un'azione distruttiva su una macchina vera in caso di errore di
+classificazione del router — si parte invece da un'unica azione sicura e
+reversibile (apertura di un URL), con una whitelist fissa validata sia lato
+server che lato agente.
+
+### Added
+- `backend/db/migrations/0001_initial_schema.sql`: tabella `device_agents`
+  (token per-dispositivo, solo l'hash persistito — stesso meccanismo di
+  `APP_PASSWORD_HASH`), applicata al progetto Supabase reale
+- `backend/app/device_agent.py`: registro dei dispositivi collegati, canale
+  di comando via Socket.IO (richiesta/risposta correlate con un request_id,
+  timeout, `ALLOWED_ACTIONS` fisso), autenticazione dell'agente all'evento
+  `connect` (non ha una sessione browser, quindi passa un token dedicato)
+- `backend/app/device_routes.py`: `GET/POST /api/devices`,
+  `DELETE /api/devices/<id>` per registrare/elencare/revocare dispositivi
+- `backend/app/router.py` + `chat_service.py`: nuovo specialist
+  "device_open" — apre un URL sul PC collegato, azione a basso rischio
+  (reversibile) che non richiede conferma esplicita
+- `local_agent/agent.py`: processo standalone da eseguire sul PC da
+  controllare — si collega al backend e esegue solo azioni della whitelist
+  (per ora `open_url`, via `webbrowser.open`), mai comandi arbitrari
+- 24 nuovi test (`test_device_agent.py`, `test_device_routes.py`,
+  `test_router.py`, `test_chat_service.py`), 188/188 passanti nel modulo
+  `backend/tests`; verificato anche end-to-end con un agente reale collegato
+  in locale (registrazione, comando eseguito, disconnessione pulita)
+
 ## [Unreleased] — Invio email via chat (RF-007/008)
 
 Primo passo verso un JARVIS che non solo risponde ma esegue azioni per conto

@@ -14,6 +14,7 @@ from app.auth import auth_bp
 from app.calendar_routes import calendar_bp
 from app.chat_routes import chat_bp
 from app.config import load_settings
+from app.device_routes import device_bp
 from app.email_routes import email_bp
 from app.extensions import limiter, socketio
 from app.google_auth_routes import google_auth_bp
@@ -54,6 +55,7 @@ def create_app(env_file: str | None = None) -> Flask:
     app.register_blueprint(google_auth_bp)
     app.register_blueprint(email_bp)
     app.register_blueprint(calendar_bp)
+    app.register_blueprint(device_bp)
 
     from app import sockets as _sockets  # noqa: F401  (registra gli handler sull'istanza socketio)
 

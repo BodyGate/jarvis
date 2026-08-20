@@ -23,6 +23,7 @@ from supabase import Client
 from app.calendar_service import CalendarError, create_event, list_events
 from app.config import Settings
 from app.constants import DEFAULT_USER_ID
+from app.device_agent import DeviceAgentError, send_device_command
 from app.email_compose import EmailComposeError, compose_email
 from app.gmail import GmailError, create_draft, list_messages
 from app.google_oauth import GoogleOAuthError
@@ -172,6 +173,22 @@ def _handle_email_send(
     return content, action_payload
 
 
+def _handle_device_open(device_url: Optional[str]) -> str:
+    """Apre un URL sul PC collegato tramite l'agente locale (app.device_agent).
+    Azione a basso rischio (reversibile, sola apertura di un URL, whitelist
+    fissa lato server e lato agente): non richiede conferma esplicita, a
+    differenza dell'invio email."""
+    if not device_url:
+        return "Non ho capito cosa aprire — puoi essere più specifico?"
+
+    try:
+        send_device_command("open_url", {"url": device_url})
+    except DeviceAgentError as exc:
+        return f"Non sono riuscito ad aprirlo sul PC ({exc})."
+
+    return f"Aperto {device_url} sul PC."
+
+
 def _calendar_range(date_range: str) -> tuple[str, str]:
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -270,6 +287,8 @@ def _handle_local_specialist(
         return _handle_email_search(db, user_text, settings), None
     if specialist == "email_send":
         return _handle_email_send(db, classification.get("email_to"), user_text, context, settings)
+    if specialist == "device_open":
+        return _handle_device_open(classification.get("device_url")), None
     if specialist == "calendar_read":
         return _handle_calendar_read(db, classification.get("date_range") or "today", settings), None
     if specialist == "calendar_create":

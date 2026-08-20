@@ -7,6 +7,7 @@ from flask import current_app, request, session
 from flask_socketio import emit, join_room
 
 from app.chat_service import ChatServiceError, process_message
+from app.device_agent import authenticate_connection, handle_disconnect as _handle_device_disconnect
 from app.extensions import socketio
 from app.supabase_client import get_supabase_client
 
@@ -16,10 +17,19 @@ def _require_session() -> bool:
 
 
 @socketio.on("connect")
-def handle_connect():
-    if not _require_session():
-        return False  # rifiuta la connessione
-    return True
+def handle_connect(auth=None):
+    if _require_session():
+        return True
+    # Nessuna sessione browser: prova ad autenticare come agente locale
+    # (vedi app.device_agent) prima di rifiutare la connessione.
+    return authenticate_connection(auth)
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    # No-op per i client browser (non tracciati qui): rilevante solo per
+    # ripulire lo stato di un eventuale agente locale disconnesso.
+    _handle_device_disconnect()
 
 
 @socketio.on("join_conversation")

@@ -53,6 +53,7 @@ def test_classify_intent_returns_parsed_classification():
         "event_date": None,
         "event_time": None,
         "email_to": None,
+        "device_url": None,
         "confidence": 0.9,
     }
 
@@ -114,6 +115,41 @@ def test_classify_intent_ignores_email_to_for_non_email_send_specialist():
         result = classify_intent("leggi le mie email", settings)
 
     assert result["email_to"] is None
+
+
+def test_classify_intent_extracts_device_url_for_device_open():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "open_app",
+                "target": "local",
+                "specialist": "device_open",
+                "device_url": "https://open.spotify.com",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("apri Spotify sul pc", settings)
+
+    assert result["specialist"] == "device_open"
+    assert result["device_url"] == "https://open.spotify.com"
+
+
+def test_classify_intent_ignores_device_url_for_non_device_open_specialist():
+    settings = _settings()
+    with patch("app.router.requests.post") as mock_post:
+        mock_post.return_value = _groq_response(
+            {
+                "intent": "read_email",
+                "target": "local",
+                "specialist": "email_read",
+                "device_url": "https://open.spotify.com",
+                "confidence": 0.9,
+            }
+        )
+        result = classify_intent("leggi le mie email", settings)
+
+    assert result["device_url"] is None
 
 
 def test_classify_intent_ignores_city_for_non_weather_specialist():
@@ -216,5 +252,6 @@ def test_classify_image_message_always_targets_gemini():
         "event_date": None,
         "event_time": None,
         "email_to": None,
+        "device_url": None,
         "confidence": 1.0,
     }

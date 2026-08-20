@@ -163,3 +163,28 @@ CREATE INDEX IF NOT EXISTS idx_calendar_cache_start
     ON calendar_cache(user_id, start_time);
 
 ALTER TABLE calendar_cache ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- Tabella: device_agents
+-- Dispositivi locali collegabili (agente companion sul PC/telefono) a cui
+-- JARVIS può inviare comandi da una whitelist fissa lato server e lato
+-- agente (mai comandi arbitrari) — richiesta esplicita dell'utente: "voglio
+-- che si colleghi al dispositivo dove è installato per poterlo gestire".
+-- token_hash è l'hash del token per-dispositivo (werkzeug
+-- generate_password_hash, stesso meccanismo di APP_PASSWORD_HASH): il
+-- token in chiaro viene mostrato una sola volta alla registrazione e non è
+-- mai persistito.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS device_agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL DEFAULT 'default',
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    last_seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_agents_user
+    ON device_agents(user_id);
+
+ALTER TABLE device_agents ENABLE ROW LEVEL SECURITY;

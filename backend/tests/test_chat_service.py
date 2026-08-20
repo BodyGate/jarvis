@@ -268,6 +268,71 @@ def test_process_message_email_send_creates_draft_and_asks_confirmation():
     assert "Confermi l'invio?" in result["assistant_message"]["content"]
 
 
+def test_process_message_device_open_without_url_asks_to_clarify():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "open_app",
+            "target": "local",
+            "specialist": "device_open",
+            "device_url": None,
+            "confidence": 0.4,
+        },
+    ):
+        result = process_message(
+            db, settings, text="aprimi una cosa", image_base64=None, conversation_id=None
+        )
+
+    assert "più specifico" in result["assistant_message"]["content"]
+
+
+def test_process_message_device_open_without_device_connected():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "open_app",
+            "target": "local",
+            "specialist": "device_open",
+            "device_url": "https://open.spotify.com",
+            "confidence": 0.9,
+        },
+    ):
+        result = process_message(
+            db, settings, text="apri spotify sul pc", image_base64=None, conversation_id=None
+        )
+
+    assert "Nessun dispositivo collegato" in result["assistant_message"]["content"]
+    assert result["action"] is None
+
+
+def test_process_message_device_open_sends_command_to_connected_device():
+    db = FakeSupabaseClient()
+    settings = _settings()
+
+    with patch(
+        "app.chat_service.classify_intent",
+        return_value={
+            "intent": "open_app",
+            "target": "local",
+            "specialist": "device_open",
+            "device_url": "https://open.spotify.com",
+            "confidence": 0.9,
+        },
+    ), patch("app.chat_service.send_device_command", return_value={"success": True}) as mock_send:
+        result = process_message(
+            db, settings, text="apri spotify sul pc", image_base64=None, conversation_id=None
+        )
+
+    mock_send.assert_called_once_with("open_url", {"url": "https://open.spotify.com"})
+    assert "open.spotify.com" in result["assistant_message"]["content"]
+
+
 def test_process_message_calendar_create_without_title_asks_to_repeat():
     db = FakeSupabaseClient()
     settings = _settings()

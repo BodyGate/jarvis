@@ -35,6 +35,7 @@ VALID_SPECIALISTS = {
     "email_read",
     "email_search",
     "email_send",
+    "device_open",
     "calendar_read",
     "calendar_create",
     "conversation_delete",
@@ -59,6 +60,8 @@ Classifica il messaggio dell'utente in intent, target e specialist, seguendo que
   - "email_search": cercare email specifiche
   - "email_send": scrivere/inviare una nuova email a qualcuno (non per leggere
     o cercare email esistenti — quelli sono "email_read"/"email_search")
+  - "device_open": l'utente chiede di aprire un'app o un sito sul computer
+    collegato (es. "apri Spotify sul pc", "apri YouTube")
   - "calendar_read": leggere eventi calendario
   - "calendar_create": creare un evento calendario
   - "conversation_delete": l'utente chiede esplicitamente di cancellare/eliminare
@@ -91,8 +94,17 @@ destinatario se è esplicitamente presente nel messaggio (es. "mario@esempio.com
 altrimenti null — non inventare un indirizzo. Per ogni altro specialist,
 "email_to" è null.
 
+Quando specialist è "device_open", estrai in "device_url" l'URL da aprire:
+se l'utente menziona un URL esplicito usa quello, altrimenti se menziona un
+servizio noto usa il suo URL principale (es. Spotify → "https://open.spotify.com",
+YouTube → "https://youtube.com", Gmail → "https://mail.google.com", Google
+Calendar → "https://calendar.google.com", Google Maps → "https://maps.google.com",
+WhatsApp Web → "https://web.whatsapp.com", Netflix → "https://netflix.com").
+Se non riesci a determinare un URL con sicurezza, usa null — non inventare.
+Per ogni altro specialist, "device_url" è null.
+
 Rispondi SOLO con un oggetto JSON, senza altro testo, in questo formato esatto:
-{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "confidence": <0.0-1.0>}}
+{{"intent": "<breve_slug_intento>", "target": "local|chatgpt|claude", "specialist": "<uno_dei_valori_sopra>", "city": "<nome_città_o_null>", "date_range": "<today|tomorrow|week|null>", "event_title": "<titolo_o_null>", "event_date": "<YYYY-MM-DD_o_null>", "event_time": "<HH:MM_o_null>", "email_to": "<indirizzo_o_null>", "device_url": "<url_o_null>", "confidence": <0.0-1.0>}}
 """
 
 
@@ -156,6 +168,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
     event_date = _clean_str(classification.get("event_date"))
     event_time = _clean_str(classification.get("event_time")) or "09:00"
     email_to = _clean_str(classification.get("email_to"))
+    device_url = _clean_str(classification.get("device_url"))
 
     specialist = specialist if target == "local" else None
 
@@ -169,6 +182,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
         "event_date": event_date if specialist == "calendar_create" else None,
         "event_time": event_time if specialist == "calendar_create" else None,
         "email_to": email_to if specialist == "email_send" else None,
+        "device_url": device_url if specialist == "device_open" else None,
         "confidence": float(classification.get("confidence", 0.0)),
     }
 
@@ -186,5 +200,6 @@ def classify_image_message() -> dict:
         "event_date": None,
         "event_time": None,
         "email_to": None,
+        "device_url": None,
         "confidence": 1.0,
     }
