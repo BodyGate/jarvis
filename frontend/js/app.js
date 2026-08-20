@@ -1,528 +1,607 @@
-// Logica applicativa JARVIS: login, chat via WebSocket, azioni di delega
-// (ADR-0003), upload immagini, voce (Web Speech API), collegamento Google.
-(() => {
-  "use strict";
+// Logica applicativa JARVIS: login, dati reali delle conversazioni, ciclo
+// vocale/testuale collegato al backend, delega (ADR-0003), voce.
+// Guida l'interfaccia 3D di scene.js.
+import { Scene3D, BRAINS } from "./scene.js";
 
-  const $ = (id) => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 
-  const loginScreen = $("login-screen");
-  const chatScreen = $("chat-screen");
-  const loginForm = $("login-form");
-  const loginPassword = $("login-password");
-  const loginSubmit = $("login-submit");
-  const loginError = $("login-error");
+const loginScreen = $("login-screen");
+const chatScreen = $("chat-screen");
+const loginForm = $("login-form");
+const loginPassword = $("login-password");
+const loginSubmit = $("login-submit");
+const loginError = $("login-error");
 
-  const messagesEl = $("messages");
-  const typingIndicator = $("typing-indicator");
-  const messageForm = $("message-form");
-  const messageInput = $("message-input");
-  const sendBtn = $("send-btn");
-  const attachBtn = $("attach-btn");
-  const imageInput = $("image-input");
-  const imagePreview = $("image-preview");
-  const imagePreviewImg = $("image-preview-img");
-  const imagePreviewRemove = $("image-preview-remove");
-  const micBtn = $("mic-btn");
-  const newChatBtn = $("new-chat-btn");
-  const logoutBtn = $("logout-btn");
-  const googleBtn = $("google-btn");
-  const connectionDot = $("connection-dot");
-  const connectionLabel = $("connection-label");
-  const actionCardTemplate = $("action-card-template");
+const canvas = $("scene-canvas");
+const labelLayer = $("body-labels");
+const brainsEl = $("jv-brains");
+const bodyCountEl = $("jv-bodycount");
+const stateCodeEl = $("jv-statecode");
+const sidebarEl = $("jv-sidebar");
+const rowsEl = $("jv-rows");
+const homeBtn = $("jv-home-btn");
+const dockEl = $("jv-dock");
+const transcriptEl = $("jv-transcript");
+const messageForm = $("message-form");
+const messageInput = $("message-input");
+const micBtn = $("mic-btn");
+const attachBtn = $("attach-btn");
+const imageInput = $("image-input");
+const imagePreview = $("image-preview");
+const imagePreviewImg = $("image-preview-img");
+const imagePreviewRemove = $("image-preview-remove");
+const captionEl = $("jv-caption");
+const subCaptionEl = $("jv-subcaption");
+const panelEl = $("jv-panel");
+const panelKindEl = $("jv-panel-kind");
+const panelCloseBtn = $("jv-panel-close");
+const panelTitleEl = $("jv-panel-title");
+const panelSummaryEl = $("jv-panel-summary");
+const panelWhenEl = $("jv-panel-when");
+const panelMsgsEl = $("jv-panel-msgs");
+const panelRelFillEl = $("jv-panel-relfill");
+const panelBrainDotEl = $("jv-panel-brain-dot");
+const panelBrainEl = $("jv-panel-brain");
+const ttsBtn = $("tts-btn");
+const googleBtn = $("google-btn");
+const logoutBtn = $("logout-btn");
 
-  let socket = null;
-  let currentConversationId = null;
-  let pendingImage = null; // data URL in attesa di invio
+let scene = null;
+let socket = null;
+let currentConversationId = null;
+let pendingImage = null;
+let requestToken = 0;
+let msgs = []; // trascritto visibile, max 2 — { who: 'you'|'jarvis', text }
 
-  // ---------- Utility ----------
+const CAPTIONS = {
+  idle: ["Standby", "tap the core or type"],
+  listening: ["Listening", "the core is taking in sound"],
+  processing: ["Processing", "routing to the best brain"],
+  responding: ["Responding", null], // sottotitolo impostato dinamicamente col brain
+};
 
-  async function api(path, options = {}) {
-    const response = await fetch(path, {
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    let body = null;
-    try {
-      body = await response.json();
-    } catch (_) {
-      /* risposta senza corpo JSON */
-    }
-    return { ok: response.ok, status: response.status, body };
+// ---------- Utility ----------
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  let body = null;
+  try {
+    body = await response.json();
+  } catch (_) {
+    /* risposta senza corpo JSON */
   }
+  return { ok: response.ok, status: response.status, body };
+}
 
-  function autoResizeTextarea() {
-    messageInput.style.height = "auto";
-    messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + "px";
-  }
+function formatWhen(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hr${hr > 1 ? "s" : ""} ago`;
+  const day = Math.round(hr / 24);
+  if (day === 1) return "yesterday";
+  if (day < 7) return `${day} days ago`;
+  const week = Math.round(day / 7);
+  return `${week} week${week > 1 ? "s" : ""} ago`;
+}
 
-  function scrollToBottom() {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+// target di routing (app.chat_service) -> nome "brain" del design (scene.BRAINS)
+function targetToBrain(target) {
+  if (target === "claude") return "Claude";
+  if (target === "chatgpt") return "ChatGPT";
+  if (target === "gemini") return "Gemini";
+  return "Groq"; // "local": classificato ed eventualmente risposto da Groq
+}
 
-  function formatTime(iso) {
-    try {
-      return new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-    } catch (_) {
-      return "";
-    }
-  }
+// ---------- Conversazioni reali -> Body[] della scena ----------
 
-  // ---------- Rendering messaggi ----------
+function computeRelevance(conv, maxMsgCount) {
+  const hoursSince = (Date.now() - new Date(conv.updated_at).getTime()) / 3600000;
+  const recency = Math.exp(-hoursSince / 72); // decadimento ~72h
+  const frequency = maxMsgCount > 0 ? Math.min(conv.message_count / maxMsgCount, 1) : 0;
+  return Math.min(1, Math.max(0.12, 0.15 + recency * 0.6 + frequency * 0.25));
+}
 
-  function clearMessages() {
-    messagesEl.innerHTML = "";
-  }
-
-  function showEmptyState() {
-    clearMessages();
-    const wrap = document.createElement("div");
-    wrap.className = "empty-state";
-    wrap.innerHTML = `
-      <img src="icons/icon-192.png" alt="" class="brand-mark" />
-      <p>Ciao! Scrivimi qualcosa, oppure allega una foto o usa la voce.</p>
-    `;
-    messagesEl.appendChild(wrap);
-  }
-
-  function renderActionCard(container, action) {
-    const node = actionCardTemplate.content.cloneNode(true);
-    const label = node.querySelector(".action-card-label");
-    const openBtn = node.querySelector(".action-open-btn");
-    const copyBtn = node.querySelector(".action-copy-btn");
-
-    const targetName = action.target === "claude" ? "Claude" : "ChatGPT";
-    label.textContent = `Richiede ${targetName}`;
-    openBtn.textContent = `Apri ${targetName}`;
-
-    const doCopyAndOpen = () => {
-      // ADR-0003: copia dentro il gesto di tap, poi apre subito la scheda —
-      // entrambe le chiamate restano sincrone nello stesso handler.
-      navigator.clipboard.writeText(action.prompt).catch(() => {});
-      window.open(action.url, "_blank", "noopener");
+function conversationsToBodies(convs) {
+  const maxMsgCount = Math.max(1, ...convs.map((c) => c.message_count || 0));
+  return convs.map((c, i) => {
+    const brain = targetToBrain(c.last_target);
+    const msgCount = c.message_count || 0;
+    return {
+      id: c.id,
+      name: c.title || "Untitled",
+      kind: "chat", // nessun concetto di "progetto" nello schema attuale
+      rel: computeRelevance(c, maxMsgCount),
+      msgs: msgCount,
+      when: formatWhen(c.updated_at),
+      brain,
+      summary: msgCount > 0 ? `${msgCount} exchange${msgCount === 1 ? "" : "s"}, last via ${brain}.` : "No messages yet.",
+      order: i,
     };
+  });
+}
 
-    openBtn.addEventListener("click", doCopyAndOpen);
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(action.prompt).catch(() => {});
-      copyBtn.textContent = "Copiato ✓";
-      copyBtn.classList.add("copied");
-      setTimeout(() => {
-        copyBtn.textContent = "Copia prompt";
-        copyBtn.classList.remove("copied");
-      }, 1600);
-    });
+let allBodies = [];
 
-    container.appendChild(node);
+async function refreshConversations(preserveSelection = true) {
+  const { ok, body } = await api("/api/chat/conversations");
+  if (!ok || !body?.data) return;
+  allBodies = conversationsToBodies(body.data.conversations);
+  scene.setBodies(allBodies);
+  renderSidebarRows();
+  bodyCountEl.textContent = String(scene.bodies.length).padStart(2, "0");
+
+  if (preserveSelection && currentConversationId) {
+    const stillExists = allBodies.some((b) => b.id === currentConversationId);
+    if (stillExists) scene.select(currentConversationId);
   }
+}
 
-  function appendMessage(msg) {
-    if (messagesEl.querySelector(".empty-state")) clearMessages();
+// ---------- Sidebar "Constellation" ----------
 
+function renderSidebarRows() {
+  rowsEl.innerHTML = "";
+  if (!allBodies.length) {
+    const empty = document.createElement("div");
+    empty.className = "jv-sidebar-empty";
+    empty.textContent = "No conversations yet — say something to start one.";
+    rowsEl.appendChild(empty);
+    return;
+  }
+  for (const b of allBodies) {
+    const brainDef = BRAINS.find((x) => x.name === b.brain) || BRAINS[0];
     const row = document.createElement("div");
-    row.className = `msg-row ${msg.role === "user" ? "user" : "assistant"}`;
-
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-
-    if (msg.image_url) {
-      const img = document.createElement("img");
-      img.src = msg.image_url;
-      img.className = "attached";
-      img.alt = "Immagine allegata";
-      bubble.appendChild(img);
-    }
-
-    const text = document.createElement("div");
-    text.textContent = msg.content;
-    bubble.appendChild(text);
-
-    if (msg.action) {
-      renderActionCard(bubble, msg.action);
-    }
-
-    const meta = document.createElement("div");
-    meta.className = "msg-meta";
-    meta.textContent = formatTime(msg.created_at || new Date().toISOString());
-    bubble.appendChild(meta);
-
-    row.appendChild(bubble);
-    messagesEl.appendChild(row);
-    scrollToBottom();
-
-    if (msg.role === "assistant" && msg.content) {
-      speak(msg.content);
-    }
+    row.className = "jv-row" + (currentConversationId === b.id ? " selected" : "");
+    row.style.borderLeftColor = currentConversationId === b.id ? brainDef.color : "transparent";
+    row.innerHTML = `<span class="jv-row-dot" style="background:${brainDef.color};opacity:${0.45 + b.rel * 0.55};box-shadow:0 0 8px 1px ${brainDef.color}55;"></span>
+      <span class="jv-row-text">
+        <span class="jv-row-name"></span>
+        <span class="jv-row-meta">${escapeHtml((b.kind === "project" ? "Project" : "Chat") + " · " + b.when)}</span>
+      </span>`;
+    row.querySelector(".jv-row-name").textContent = b.name;
+    row.addEventListener("click", () => selectConversation(b.id));
+    row.addEventListener("mouseenter", () => scene.hoverRow(b.id));
+    row.addEventListener("mouseleave", () => scene.clearHover());
+    rowsEl.appendChild(row);
   }
+}
 
-  function setTyping(isTyping) {
-    typingIndicator.hidden = !isTyping;
-    if (isTyping) scrollToBottom();
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ---------- Selezione / pannello di dettaglio ----------
+
+async function selectConversation(id) {
+  currentConversationId = id;
+  scene.select(id);
+  renderSidebarRows();
+  const { ok, body } = await api(`/api/chat/history?conversation_id=${id}`);
+  if (ok && body?.data) {
+    const all = body.data.messages;
+    msgs = all.slice(-2).map((m) => ({ who: m.role === "user" ? "you" : "jarvis", text: m.content }));
+    renderTranscript();
   }
+}
 
-  // ---------- Voce (Web Speech API) ----------
+function deselectConversation() {
+  currentConversationId = null;
+  scene.deselect();
+  renderSidebarRows();
+  msgs = [];
+  renderTranscript();
+}
 
-  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognizer = null;
-  let isRecording = false;
+homeBtn.addEventListener("click", deselectConversation);
+panelCloseBtn.addEventListener("click", deselectConversation);
 
-  function initSpeechRecognition() {
-    if (!SpeechRecognitionImpl) {
-      micBtn.style.display = "none";
-      return;
-    }
-    recognizer = new SpeechRecognitionImpl();
-    recognizer.lang = "it-IT";
-    recognizer.interimResults = false;
-    recognizer.maxAlternatives = 1;
-
-    recognizer.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      messageInput.value = (messageInput.value ? messageInput.value + " " : "") + transcript;
-      autoResizeTextarea();
-      messageInput.focus();
-    };
-    recognizer.onend = () => {
-      isRecording = false;
-      micBtn.classList.remove("recording");
-    };
-    recognizer.onerror = () => {
-      isRecording = false;
-      micBtn.classList.remove("recording");
-    };
+function renderPanel(data) {
+  if (!data) {
+    panelEl.hidden = true;
+    return;
   }
+  const brainDef = BRAINS.find((x) => x.name === data.brain) || BRAINS[0];
+  panelEl.hidden = false;
+  panelKindEl.textContent = data.kind === "project" ? "Project" : "Conversation";
+  panelTitleEl.textContent = data.name;
+  panelSummaryEl.textContent = data.summary;
+  panelWhenEl.textContent = data.when;
+  panelMsgsEl.textContent = String(data.msgs);
+  panelRelFillEl.style.width = Math.round(data.rel * 100) + "%";
+  panelRelFillEl.style.background = `linear-gradient(90deg, ${brainDef.color}, #9d7bff)`;
+  panelBrainDotEl.style.background = brainDef.color;
+  panelBrainDotEl.style.boxShadow = `0 0 9px 2px ${brainDef.color}66`;
+  panelBrainEl.textContent = "ROUTED VIA " + data.brain.toUpperCase();
+}
 
-  micBtn.addEventListener("click", () => {
-    if (!recognizer) return;
-    if (isRecording) {
-      recognizer.stop();
-      return;
-    }
-    isRecording = true;
-    micBtn.classList.add("recording");
-    try {
-      recognizer.start();
-    } catch (_) {
-      isRecording = false;
-      micBtn.classList.remove("recording");
-    }
-  });
+// ---------- Status bar: chip dei modelli ----------
 
-  // La Web Speech API espone qualunque voce installata nel sistema operativo,
-  // ma sceglie di default quella più "compatta"/robotica se non specificata
-  // esplicitamente. Qui si cerca la miglior voce italiana disponibile,
-  // preferendo i motori neurali/cloud (molto più naturali) a quelli offline
-  // di base — la disponibilità varia per dispositivo (iPhone/Safari ha
-  // tipicamente voci migliori di Chrome su Windows).
-  let cachedVoices = [];
-  let chosenVoice = null;
+let activeBrainName = null;
 
-  const VOICE_QUALITY_HINTS = [
-    "neural", "online", "natural", "google", "premium", "enhanced", "plus",
-  ];
-  const VOICE_LOW_QUALITY_HINTS = ["compact", "desktop", "eloquence"];
-
-  function scoreVoice(voice) {
-    const name = voice.name.toLowerCase();
-    let score = 0;
-    if (voice.lang?.toLowerCase().startsWith("it")) score += 10;
-    if (VOICE_QUALITY_HINTS.some((hint) => name.includes(hint))) score += 5;
-    if (VOICE_LOW_QUALITY_HINTS.some((hint) => name.includes(hint))) score -= 5;
-    if (voice.localService === false) score += 2; // voci cloud, di solito più naturali
-    return score;
+function renderBrainChips() {
+  brainsEl.innerHTML = "";
+  for (const b of BRAINS) {
+    const on = b.name === activeBrainName && currentMode !== "idle";
+    const chip = document.createElement("div");
+    chip.className = "jv-chip";
+    let shapeStyle = `width:8px;height:8px;flex:0 0 auto;background:${b.color};opacity:${on ? 1 : 0.42};box-shadow:${on ? `0 0 9px 2px ${b.color}80` : "none"};`;
+    if (b.name === "Groq") shapeStyle += "clip-path:polygon(50% 0,100% 100%,0 100%);";
+    else if (b.name === "Gemini") shapeStyle += "transform:rotate(45deg);";
+    else if (b.name === "ChatGPT") shapeStyle += "border-radius:3px;";
+    else shapeStyle += "border-radius:50%;";
+    chip.innerHTML = `<span class="jv-chip-shape" style="${shapeStyle}"></span><span class="jv-chip-label" style="color:${on ? "#f2f5ff" : "rgba(200,212,255,.45)"};"></span>`;
+    chip.querySelector(".jv-chip-label").textContent = b.name;
+    brainsEl.appendChild(chip);
   }
+  const routeLine = document.createElement("span");
+  routeLine.className = "jv-routeline";
+  const activeDef = BRAINS.find((b) => b.name === activeBrainName);
+  routeLine.textContent = currentMode === "idle" || !activeDef ? "standby / router idle" : activeDef.note;
+  brainsEl.appendChild(routeLine);
+}
 
-  function pickBestVoice() {
-    if (!cachedVoices.length) return null;
-    const savedName = localStorage.getItem("jarvis_tts_voice");
-    if (savedName) {
-      const saved = cachedVoices.find((v) => v.name === savedName);
-      if (saved) return saved;
-    }
-    return [...cachedVoices].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+// ---------- Stato / caption ----------
+
+let currentMode = "idle";
+
+function setMode(mode, subCaptionOverride) {
+  currentMode = mode;
+  scene.setMode(mode);
+  stateCodeEl.textContent = mode.toUpperCase();
+  const [caption, sub] = CAPTIONS[mode];
+  captionEl.textContent = caption;
+  subCaptionEl.textContent = subCaptionOverride || sub || "";
+  renderBrainChips();
+}
+
+// ---------- Trascritto (ultime 2 battute) ----------
+
+function renderTranscript() {
+  transcriptEl.innerHTML = "";
+  for (const m of msgs) {
+    const div = document.createElement("div");
+    div.className = "jv-msg " + (m.who === "you" ? "user" : "assistant");
+    div.textContent = m.text;
+    transcriptEl.appendChild(div);
   }
+}
 
-  function loadVoices() {
-    cachedVoices = window.speechSynthesis.getVoices();
-    if (cachedVoices.length) chosenVoice = pickBestVoice();
+function pushTranscript(who, text) {
+  msgs = [...msgs, { who, text }].slice(-2);
+  renderTranscript();
+}
+
+// ---------- Voce (Web Speech API) ----------
+
+const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+let isListening = false;
+
+function initSpeechRecognition() {
+  if (!SpeechRecognitionImpl) {
+    micBtn.style.display = "none";
+    return;
   }
+  recognizer = new SpeechRecognitionImpl();
+  recognizer.lang = "it-IT";
+  recognizer.interimResults = false;
+  recognizer.maxAlternatives = 1;
 
-  if ("speechSynthesis" in window) {
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+  recognizer.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    sendMessage(transcript);
+  };
+  recognizer.onend = () => {
+    isListening = false;
+    micBtn.classList.remove("listening");
+    if (currentMode === "listening") setMode("idle");
+  };
+  recognizer.onerror = () => {
+    isListening = false;
+    micBtn.classList.remove("listening");
+    if (currentMode === "listening") setMode("idle");
+  };
+}
+
+function startVoice() {
+  if (!recognizer || isListening) return;
+  isListening = true;
+  micBtn.classList.add("listening");
+  setMode("listening");
+  try {
+    recognizer.start();
+  } catch (_) {
+    isListening = false;
+    micBtn.classList.remove("listening");
+    setMode("idle");
   }
+}
 
-  let ttsEnabled = localStorage.getItem("jarvis_tts_muted") !== "true";
-  const ttsBtn = $("tts-btn");
+micBtn.addEventListener("click", startVoice);
 
-  function updateTtsButton() {
-    ttsBtn.classList.toggle("active", ttsEnabled);
-    ttsBtn.title = ttsEnabled ? "Disattiva voce risposte" : "Attiva voce risposte";
+// ---------- TTS: stessa euristica di selezione voce già validata in Fase 4 ----------
+
+let cachedVoices = [];
+let chosenVoice = null;
+const VOICE_QUALITY_HINTS = ["neural", "online", "natural", "google", "premium", "enhanced", "plus"];
+const VOICE_LOW_QUALITY_HINTS = ["compact", "desktop", "eloquence"];
+
+function scoreVoice(voice) {
+  const name = voice.name.toLowerCase();
+  let score = 0;
+  if (voice.lang?.toLowerCase().startsWith("it")) score += 10;
+  if (VOICE_QUALITY_HINTS.some((h) => name.includes(h))) score += 5;
+  if (VOICE_LOW_QUALITY_HINTS.some((h) => name.includes(h))) score -= 5;
+  if (voice.localService === false) score += 2;
+  return score;
+}
+
+function pickBestVoice() {
+  if (!cachedVoices.length) return null;
+  const savedName = localStorage.getItem("jarvis_tts_voice");
+  if (savedName) {
+    const saved = cachedVoices.find((v) => v.name === savedName);
+    if (saved) return saved;
   }
+  return [...cachedVoices].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0] || null;
+}
+
+function loadVoices() {
+  cachedVoices = window.speechSynthesis.getVoices();
+  if (cachedVoices.length) chosenVoice = pickBestVoice();
+}
+
+if ("speechSynthesis" in window) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+let ttsEnabled = localStorage.getItem("jarvis_tts_muted") !== "true";
+
+function updateTtsButton() {
+  ttsBtn.classList.toggle("active", ttsEnabled);
+  ttsBtn.title = ttsEnabled ? "Disattiva voce risposte" : "Attiva voce risposte";
+}
+updateTtsButton();
+
+ttsBtn.addEventListener("click", () => {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem("jarvis_tts_muted", (!ttsEnabled).toString());
   updateTtsButton();
+  if (!ttsEnabled) window.speechSynthesis?.cancel();
+});
 
-  ttsBtn.addEventListener("click", () => {
-    ttsEnabled = !ttsEnabled;
-    localStorage.setItem("jarvis_tts_muted", (!ttsEnabled).toString());
-    updateTtsButton();
-    if (!ttsEnabled) window.speechSynthesis?.cancel();
-  });
-
-  function speak(text) {
-    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+/** Parla il testo e ritorna una Promise che si risolve a fine riproduzione
+ * (o subito se la voce è disattivata/non disponibile) — usata per tenere lo
+ * stato "responding" per la durata reale del parlato, non un timer fisso. */
+function speak(text) {
+  return new Promise((resolve) => {
+    if (!ttsEnabled || !("speechSynthesis" in window)) {
+      resolve();
+      return;
+    }
     try {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "it-IT";
       utterance.rate = 1.02;
       if (chosenVoice) utterance.voice = chosenVoice;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utterance);
     } catch (_) {
-      /* TTS non disponibile: degradazione silenziosa, non blocca la chat */
+      resolve();
     }
+  });
+}
+
+// ---------- Upload immagine ----------
+
+attachBtn.addEventListener("click", () => imageInput.click());
+
+imageInput.addEventListener("change", () => {
+  const file = imageInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingImage = reader.result;
+    imagePreviewImg.src = pendingImage;
+    imagePreview.hidden = false;
+  };
+  reader.readAsDataURL(file);
+});
+
+imagePreviewRemove.addEventListener("click", () => {
+  pendingImage = null;
+  imageInput.value = "";
+  imagePreview.hidden = true;
+});
+
+// ---------- Connessione WebSocket ----------
+
+function connectSocket() {
+  if (socket) return;
+  socket = io({ withCredentials: true });
+  socket.on("typing", () => {}); // lo stato "processing/responding" è già pilotato da sendMessage
+  socket.on("error", () => {
+    setMode("idle");
+  });
+}
+
+function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
+// ---------- Invio messaggi (testo o voce) ----------
+
+async function sendMessage(text) {
+  text = (text || "").trim();
+  if (!text && !pendingImage) return;
+
+  const myToken = ++requestToken;
+  pushTranscript("you", text || "[image]");
+  activeBrainName = null; // il router non ha ancora deciso: nessun chip acceso
+  setMode("processing");
+
+  const payload = { text, image: pendingImage || undefined, conversation_id: currentConversationId };
+  messageInput.value = "";
+  pendingImage = null;
+  imagePreview.hidden = true;
+  imageInput.value = "";
+
+  const { ok, body } = await api("/api/chat/message", { method: "POST", body: JSON.stringify(payload) });
+  if (myToken !== requestToken) return; // superato da un invio più recente
+
+  if (!ok || !body?.data) {
+    pushTranscript("jarvis", "Something went wrong — try again.");
+    setMode("idle");
+    return;
   }
 
-  // ---------- Upload immagine ----------
+  currentConversationId = body.data.conversation_id;
+  const msg = body.data.message;
+  const brain = targetToBrain(msg.target);
+  activeBrainName = brain;
+  pushTranscript("jarvis", msg.content);
+  setMode("responding", brain + " is answering");
 
-  attachBtn.addEventListener("click", () => imageInput.click());
+  await refreshConversations();
+  await speak(msg.content);
 
-  imageInput.addEventListener("change", () => {
-    const file = imageInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      pendingImage = reader.result;
-      imagePreviewImg.src = pendingImage;
-      imagePreview.hidden = false;
+  if (myToken === requestToken) setMode("idle");
+}
+
+messageForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  sendMessage(messageInput.value);
+});
+
+// ---------- Scena: click sul nucleo / su un corpo ----------
+
+function onSceneReady() {
+  scene.onNucleusClick = () => startVoice();
+  scene.onSelectionChange = (data) => renderPanel(data);
+}
+
+// ---------- Login / bootstrap ----------
+
+function showLogin() {
+  chatScreen.hidden = true;
+  loginScreen.hidden = false;
+  loginPassword.value = "";
+  loginPassword.focus();
+}
+
+async function showChat() {
+  loginScreen.hidden = true;
+  chatScreen.hidden = false;
+
+  if (!scene) {
+    scene = new Scene3D(canvas, labelLayer, {});
+    onSceneReady();
+    await scene.init();
+  }
+
+  connectSocket();
+  setMode("idle");
+  renderBrainChips();
+  await refreshConversations(false);
+  registerServiceWorker();
+  messageInput.focus();
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  loginError.hidden = true;
+  loginSubmit.disabled = true;
+  loginSubmit.querySelector(".btn-spinner").hidden = false;
+
+  const { ok, body } = await api("/api/session/login", {
+    method: "POST",
+    body: JSON.stringify({ password: loginPassword.value }),
+  });
+
+  loginSubmit.disabled = false;
+  loginSubmit.querySelector(".btn-spinner").hidden = true;
+
+  if (ok && body?.success) {
+    await showChat();
+  } else {
+    const messages = {
+      invalid_password: "Password errata.",
+      app_password_not_configured: "L'app non è ancora configurata (manca APP_PASSWORD_HASH).",
     };
-    reader.readAsDataURL(file);
-  });
-
-  imagePreviewRemove.addEventListener("click", () => {
-    pendingImage = null;
-    imageInput.value = "";
-    imagePreview.hidden = true;
-  });
-
-  // ---------- Connessione WebSocket ----------
-
-  function setConnectionStatus(state) {
-    connectionDot.classList.remove("online", "error");
-    if (state === "online") {
-      connectionDot.classList.add("online");
-      connectionLabel.textContent = "Online";
-    } else if (state === "error") {
-      connectionDot.classList.add("error");
-      connectionLabel.textContent = "Disconnesso";
-    } else {
-      connectionLabel.textContent = "Connessione...";
-    }
+    loginError.textContent = messages[body?.error] || "Accesso non riuscito. Riprova.";
+    loginError.hidden = false;
   }
+});
 
-  function connectSocket() {
-    if (socket) return;
-    socket = io({ withCredentials: true });
+logoutBtn.addEventListener("click", async () => {
+  await api("/api/session/logout", { method: "POST" });
+  disconnectSocket();
+  showLogin();
+});
 
-    socket.on("connect", () => setConnectionStatus("online"));
-    socket.on("disconnect", () => setConnectionStatus("error"));
-    socket.on("connect_error", () => setConnectionStatus("error"));
+// ---------- Google ----------
 
-    socket.on("typing", (data) => setTyping(data.status === "start"));
-
-    socket.on("message", (msg) => {
-      setTyping(false);
-      currentConversationId = msg.conversation_id || currentConversationId;
-      appendMessage(msg);
-    });
-
-    socket.on("error", (data) => {
-      setTyping(false);
-      appendMessage({
-        role: "assistant",
-        content: `Si è verificato un problema: ${data.error || "errore sconosciuto"}.`,
-        created_at: new Date().toISOString(),
-      });
-    });
+async function refreshGoogleStatus() {
+  const { ok, body } = await api("/auth/status");
+  if (ok && body?.data?.connected) {
+    googleBtn.classList.add("active");
+    googleBtn.title = "Google collegato";
+  } else {
+    googleBtn.classList.remove("active");
+    googleBtn.title = "Collega Google";
   }
+}
 
-  function disconnectSocket() {
-    if (socket) {
-      socket.disconnect();
-      socket = null;
-    }
+googleBtn.addEventListener("click", () => {
+  window.location.href = "/auth/google";
+});
+
+function handleGoogleCallbackFeedback() {
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("google");
+  if (!status) return;
+  if (status === "connected") {
+    pushTranscript("jarvis", "Google collegato con successo. Ora posso leggere email e calendario.");
+  } else if (status === "error") {
+    const detail = params.get("google_error") || "errore sconosciuto";
+    pushTranscript("jarvis", `Collegamento a Google non riuscito (${detail}).`);
   }
+  window.history.replaceState({}, "", window.location.pathname);
+}
 
-  // ---------- Invio messaggi ----------
+// ---------- Service worker ----------
 
-  messageInput.addEventListener("input", autoResizeTextarea);
-  messageInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      messageForm.requestSubmit();
-    }
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js").catch(() => {
+    /* offline caching non disponibile: la chat resta comunque funzionante online */
   });
+}
 
-  messageForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const text = messageInput.value.trim();
-    if (!text && !pendingImage) return;
-
-    appendMessage({
-      role: "user",
-      content: text,
-      image_url: pendingImage || null,
-      created_at: new Date().toISOString(),
-    });
-
-    const payload = {
-      text,
-      image: pendingImage || undefined,
-      conversation_id: currentConversationId,
-    };
-
-    messageInput.value = "";
-    autoResizeTextarea();
-    pendingImage = null;
-    imagePreview.hidden = true;
-    imageInput.value = "";
-    setTyping(true);
-
-    if (socket && socket.connected) {
-      socket.emit("send_message", payload);
-    } else {
-      // Fallback REST se il WebSocket non è disponibile.
-      api("/api/chat/message", { method: "POST", body: JSON.stringify(payload) }).then(
-        ({ ok, body }) => {
-          setTyping(false);
-          if (ok && body?.data) {
-            currentConversationId = body.data.conversation_id;
-            appendMessage({ ...body.data.message, action: body.data.action });
-          } else {
-            appendMessage({
-              role: "assistant",
-              content: "Non sono riuscito a inviare il messaggio. Riprova.",
-              created_at: new Date().toISOString(),
-            });
-          }
-        }
-      );
-    }
-  });
-
-  // ---------- Nuova conversazione / logout ----------
-
-  newChatBtn.addEventListener("click", () => {
-    currentConversationId = null;
-    showEmptyState();
-  });
-
-  logoutBtn.addEventListener("click", async () => {
-    await api("/api/session/logout", { method: "POST" });
-    disconnectSocket();
-    showLogin();
-  });
-
-  // ---------- Google ----------
-
-  async function refreshGoogleStatus() {
-    const { ok, body } = await api("/auth/status");
-    if (ok && body?.data?.connected) {
-      googleBtn.classList.add("active");
-      googleBtn.title = "Google collegato";
-    } else {
-      googleBtn.classList.remove("active");
-      googleBtn.title = "Collega Google";
-    }
-  }
-
-  googleBtn.addEventListener("click", () => {
-    window.location.href = "/auth/google";
-  });
-
-  function handleGoogleCallbackFeedback() {
-    const params = new URLSearchParams(window.location.search);
-    const status = params.get("google");
-    if (!status) return;
-
-    if (status === "connected") {
-      appendMessage({
-        role: "assistant",
-        content: "Google collegato con successo. Ora posso leggere email e calendario.",
-        created_at: new Date().toISOString(),
-      });
-    } else if (status === "error") {
-      const detail = params.get("google_error") || "errore sconosciuto";
-      appendMessage({
-        role: "assistant",
-        content: `Collegamento a Google non riuscito (${detail}).`,
-        created_at: new Date().toISOString(),
-      });
-    }
-    window.history.replaceState({}, "", window.location.pathname);
-  }
-
-  // ---------- Login / bootstrap ----------
-
-  function showLogin() {
-    chatScreen.hidden = true;
-    loginScreen.hidden = false;
-    loginPassword.value = "";
-    loginPassword.focus();
-  }
-
-  function showChat() {
-    loginScreen.hidden = true;
-    chatScreen.hidden = false;
-    showEmptyState();
-    connectSocket();
-    refreshGoogleStatus();
+async function bootstrap() {
+  initSpeechRecognition();
+  const { ok, body } = await api("/api/session/status");
+  if (ok && body?.data?.authenticated) {
+    await showChat();
+    await refreshGoogleStatus();
     handleGoogleCallbackFeedback();
-    messageInput.focus();
+  } else {
+    showLogin();
   }
+}
 
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    loginError.hidden = true;
-    loginSubmit.disabled = true;
-    loginSubmit.querySelector(".btn-spinner").hidden = false;
-
-    const { ok, body } = await api("/api/session/login", {
-      method: "POST",
-      body: JSON.stringify({ password: loginPassword.value }),
-    });
-
-    loginSubmit.disabled = false;
-    loginSubmit.querySelector(".btn-spinner").hidden = true;
-
-    if (ok && body?.success) {
-      showChat();
-    } else {
-      const messages = {
-        invalid_password: "Password errata.",
-        app_password_not_configured: "L'app non è ancora configurata (manca APP_PASSWORD_HASH).",
-      };
-      loginError.textContent = messages[body?.error] || "Accesso non riuscito. Riprova.";
-      loginError.hidden = false;
-    }
-  });
-
-  function registerServiceWorker() {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      /* offline caching non disponibile: la chat resta comunque funzionante online */
-    });
-  }
-
-  async function bootstrap() {
-    initSpeechRecognition();
-    registerServiceWorker();
-    const { ok, body } = await api("/api/session/status");
-    if (ok && body?.data?.authenticated) {
-      showChat();
-    } else {
-      showLogin();
-    }
-  }
-
-  bootstrap();
-})();
+bootstrap();

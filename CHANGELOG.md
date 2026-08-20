@@ -3,6 +3,53 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Frontend 3D "deep space HUD" (sostituisce l'interfaccia glass/2D)
+
+Ricostruzione completa del frontend a partire da un handoff di design
+(`design_handoff_jarvis_interface/`, non versionato nel repo): un nucleo 3D
+deformante via shader GLSL custom rappresenta lo stato dell'assistente, le
+conversazioni orbitano attorno come corpi luminosi, la camera vola nello
+spazio 3D quando se ne seleziona una.
+
+### Added
+- `frontend/js/scene.js`: motore three.js. Shader GLSL (rumore simplex,
+  campo di deformazione `deform()`, nebulosa fbm ridged), tabella `STATES`
+  (idle/listening/processing/responding) con smorzamento esponenziale,
+  meccanica di orbita, volo camera, algoritmo anti-sovrapposizione delle
+  etichette — trasferiti pressoché identici dal file di design, come
+  richiesto dal suo handoff
+- `frontend/index.html`/`css/styles.css` riscritti secondo i design token
+  del documento di handoff (colori, tipografia Sora/JetBrains Mono, raggi,
+  ombre, blur, tempi) — status bar, sidebar "Constellation", dock chat,
+  pannello di dettaglio
+- Dati reali al posto dei placeholder del prototipo: conversazioni da
+  `GET /api/chat/conversations` (esteso con `message_count` e
+  `last_target`, sezione 9.1) mappate al modello `Body` del design;
+  `rel` (rilevanza) calcolata da recenza (decadimento ~72h) + frequenza
+  (conteggio messaggi), non hardcoded
+- Ciclo vocale/testuale collegato a eventi reali invece di `setTimeout`:
+  `listening` dura quanto l'ascolto STT reale, `processing` finisce
+  all'arrivo della risposta dal backend, `responding` dura quanto la
+  sintesi vocale reale (Promise su `utterance.onend`)
+- Quarto chip "ChatGPT" nella status bar (non presente nel design
+  originale, che ne prevedeva 3): il nostro router delega anche a ChatGPT
+  oltre che a Claude (ADR-0003), non solo ai tre brain del prototipo
+- `three.js` r160 (build minificata, 656KB) vendorizzato in
+  `frontend/js/vendor/`, stesso principio già applicato a Socket.IO
+  (ADR-0001, niente CDN a runtime)
+
+### Note
+- Nessun concetto di "progetto" nello schema dati attuale: tutti i corpi
+  sono "Chat" — il design distingueva chat/project, funzionalità non
+  ancora esistente lato backend
+- I riepiloghi nel pannello di dettaglio sono generati deterministicamente
+  da dati reali (conteggio scambi, ultimo brain), non da un modello — il
+  design assumeva un sommario testuale generato, non presente nel backend
+- L'interfaccia conserva testo inglese per la "cromatura" HUD (status bar,
+  didascalie, etichette mono) come da fedeltà "definitiva" richiesta dal
+  documento di handoff; la schermata di login resta in italiano, non
+  coperta dal design
+
 ## [Unreleased] — Fase 4: Frontend PWA
 
 ### Added

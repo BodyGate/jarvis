@@ -29,6 +29,11 @@ class _Query:
         self._filters.append((field, value))
         return self
 
+    def in_(self, field, values):
+        values = set(values)
+        self._filters.append((field, lambda v: v in values))
+        return self
+
     def order(self, field, desc: bool = False):
         self._order_by = field
         self._desc = desc
@@ -44,7 +49,10 @@ class _Query:
     def _matching_rows(self):
         rows = self._store.setdefault(self._table, [])
         for field, value in self._filters:
-            rows = [r for r in rows if r.get(field) == value]
+            if callable(value):
+                rows = [r for r in rows if value(r.get(field))]
+            else:
+                rows = [r for r in rows if r.get(field) == value]
         return rows
 
     def execute(self):

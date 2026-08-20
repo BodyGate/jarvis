@@ -7,12 +7,14 @@
 // ogni deploy finché la cache non scadeva esplicitamente. Con network-first
 // l'utente online vede sempre l'ultima versione; solo se la rete non
 // risponde si usa la copia in cache (offline reale, non "poco aggiornato").
-const CACHE_NAME = "jarvis-shell-v2";
+const CACHE_NAME = "jarvis-shell-v3";
 const SHELL_ASSETS = [
   "/",
   "/css/styles.css",
   "/js/app.js",
+  "/js/scene.js",
   "/js/vendor/socket.io.min.js",
+  "/js/vendor/three.module.js",
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

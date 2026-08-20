@@ -94,4 +94,31 @@ def conversations():
         .order("updated_at", desc=True)
         .execute()
     )
-    return jsonify({"success": True, "data": {"conversations": result.data}})
+    convs = result.data
+
+    # Conteggio messaggi e ultimo "brain" per conversazione (per la UI 3D,
+    # sezione "Constellation"/pannello dettaglio): una sola query aggregata
+    # invece di una per conversazione (N+1), che scalerebbe male anche con
+    # poche decine di conversazioni.
+    conv_ids = [c["id"] for c in convs]
+    counts: dict[str, int] = {}
+    last_target: dict[str, str] = {}
+    if conv_ids:
+        msg_result = (
+            db.table("messages")
+            .select("conversation_id, role, target, created_at")
+            .in_("conversation_id", conv_ids)
+            .order("created_at")
+            .execute()
+        )
+        for m in msg_result.data:
+            cid = m["conversation_id"]
+            counts[cid] = counts.get(cid, 0) + 1
+            if m["role"] == "assistant" and m.get("target"):
+                last_target[cid] = m["target"]  # ordinati per data: l'ultimo sovrascrive
+
+    for c in convs:
+        c["message_count"] = counts.get(c["id"], 0)
+        c["last_target"] = last_target.get(c["id"])
+
+    return jsonify({"success": True, "data": {"conversations": convs}})
