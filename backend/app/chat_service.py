@@ -274,7 +274,13 @@ def _handle_calendar_create(
     if not title or not event_date:
         return "Non ho capito titolo e data dell'evento da creare — puoi ripetere in modo più esplicito?"
 
-    start_dt = datetime.fromisoformat(f"{event_date}T{event_time}:00")
+    # event_date/event_time arrivano dal JSON del router (guidato dal
+    # prompt, non validato da uno schema): un formato leggermente diverso da
+    # quello richiesto non deve far fallire l'intera richiesta con un 500.
+    try:
+        start_dt = datetime.fromisoformat(f"{event_date}T{event_time}:00")
+    except ValueError:
+        return "Non ho capito bene data od ora dell'evento — puoi ripetere in modo più esplicito (es. \"venerdì alle 17\")?"
     end_dt = start_dt + timedelta(hours=1)
 
     try:
@@ -491,12 +497,21 @@ def process_message(
             }
 
     # RF-013: estrazione best-effort di nuovi fatti dal messaggio dell'utente,
-    # usati subito anche nella risposta di questo stesso turno.
-    known_facts = get_known_facts(db)
-    new_facts = extract_facts(text, known_facts, settings)
-    if new_facts:
-        save_facts(db, new_facts, user_message["id"])
-        known_facts = new_facts + known_facts
+    # usati subito anche nella risposta di questo stesso turno. Il modulo
+    # `app.memory` promette di non rompere mai la chat (vedi il suo
+    # docstring), ma quella garanzia va rispettata anche qui: un output
+    # malformato da Groq o un errore transitorio di Supabase non deve far
+    # fallire l'intera richiesta — la memoria è un arricchimento, non un
+    # requisito per rispondere.
+    known_facts = []
+    try:
+        known_facts = get_known_facts(db)
+        new_facts = extract_facts(text, known_facts, settings)
+        if new_facts:
+            save_facts(db, new_facts, user_message["id"])
+            known_facts = new_facts + known_facts
+    except Exception:
+        logger.exception("Gestione memoria a lungo termine fallita, ignorata")
 
     assistant_fields, action_payload = _build_assistant_reply(
         db,

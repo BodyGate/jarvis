@@ -93,6 +93,29 @@ def test_authenticate_rejects_wrong_token():
     assert device_agent._authenticate(db, "wrong-token") is None
 
 
+def test_authenticate_connection_returns_false_on_unexpected_error(tmp_path):
+    """Regressione: ripulendo lo scaffolding di debug del bug del timeout
+    dell'agente, il try/except attorno ad `authenticate_connection` era
+    stato rimosso insieme alle variabili diagnostiche — un errore
+    imprevisto (es. Supabase temporaneamente irraggiungibile) faceva
+    crashare l'handler `connect` di Socket.IO invece di rifiutare la
+    connessione in modo pulito."""
+    from app import create_app
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SECRET_KEY=test-secret\n", encoding="utf-8")
+    flask_app = create_app(env_file=str(env_file))
+
+    with flask_app.test_request_context("/"):
+        from flask import request
+
+        request.sid = "fake-sid"
+        with patch("app.device_agent.get_supabase_client", side_effect=RuntimeError("boom")):
+            result = device_agent.authenticate_connection({"token": "whatever"})
+
+    assert result is False
+
+
 def test_authenticate_rejects_missing_token():
     db = FakeSupabaseClient()
     register_device(db, "PC")

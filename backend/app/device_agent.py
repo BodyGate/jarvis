@@ -116,19 +116,26 @@ def _authenticate(db: Client, token: Optional[str]) -> Optional[str]:
 
 def authenticate_connection(auth: Optional[dict]) -> bool:
     """Chiamata dall'handler `connect` di Socket.IO per i client privi di
-    sessione browser valida — cioè un agente locale."""
-    token = (auth or {}).get("token") if isinstance(auth, dict) else None
-    settings = current_app.config["JARVIS_SETTINGS"]
-    db = get_supabase_client(settings)
-    device_id = _authenticate(db, token)
-    if device_id is None:
-        return False
+    sessione browser valida — cioè un agente locale. Non deve mai sollevare
+    un'eccezione: un errore qui (es. Supabase temporaneamente irraggiungibile)
+    deve rifiutare la connessione in modo pulito, non far crashare l'handler
+    `connect` di Flask-SocketIO."""
+    try:
+        token = (auth or {}).get("token") if isinstance(auth, dict) else None
+        settings = current_app.config["JARVIS_SETTINGS"]
+        db = get_supabase_client(settings)
+        device_id = _authenticate(db, token)
+        if device_id is None:
+            return False
 
-    _connected_devices[device_id] = request.sid
-    _sid_to_device[request.sid] = device_id
-    db.table("device_agents").update({"last_seen_at": _now_iso()}).eq("id", device_id).execute()
-    logger.info("Device agent collegato: %s", device_id)
-    return True
+        _connected_devices[device_id] = request.sid
+        _sid_to_device[request.sid] = device_id
+        db.table("device_agents").update({"last_seen_at": _now_iso()}).eq("id", device_id).execute()
+        logger.info("Device agent collegato: %s", device_id)
+        return True
+    except Exception:
+        logger.exception("authenticate_connection ha sollevato un'eccezione")
+        return False
 
 
 def handle_disconnect() -> None:

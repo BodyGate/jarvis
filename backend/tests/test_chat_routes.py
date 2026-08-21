@@ -17,6 +17,33 @@ def _logged_in_client(tmp_path):
     return client
 
 
+def test_send_message_rejects_non_uuid_conversation_id(tmp_path):
+    """Un conversation_id malformato farebbe fallire la query Postgres reale
+    (uuid non valido) con un 500 invece di un errore applicativo pulito —
+    stesso bug pattern già corretto per gli endpoint /conversations/<id>,
+    dimenticato qui."""
+    client = _logged_in_client(tmp_path)
+    response = client.post("/api/chat/message", json={"text": "ciao", "conversation_id": "not-a-uuid"})
+
+    assert response.status_code == 400
+
+
+def test_send_message_allows_missing_conversation_id(tmp_path):
+    """conversation_id assente (nuova conversazione) non deve essere
+    rifiutato dalla validazione del formato."""
+    from tests.fake_supabase import FakeSupabaseClient
+
+    db = FakeSupabaseClient()
+    client = _logged_in_client(tmp_path)
+    with patch("app.chat_routes.get_supabase_client", return_value=db), patch(
+        "app.chat_service.classify_intent",
+        return_value={"intent": "x", "target": "local", "specialist": "other", "confidence": 0.5},
+    ), patch("app.chat_service.generate_reply", return_value="ok"):
+        response = client.post("/api/chat/message", json={"text": "ciao"})
+
+    assert response.status_code == 200
+
+
 def test_conversations_requires_session(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("SECRET_KEY=test-secret\n", encoding="utf-8")

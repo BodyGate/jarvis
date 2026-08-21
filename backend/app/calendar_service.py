@@ -60,17 +60,23 @@ def create_event(
     location: str = "",
     description: str = "",
 ) -> str:
-    """RF-010. `start`/`end` in formato RFC3339. L'API Calendar richiede un
-    fuso orario esplicito (offset nella stringa, oppure il campo
-    `timeZone`): quando `start`/`end` non lo includono già (nessun `+`, `-`
-    dopo l'ora, o `Z` finale), si assume UTC — coerente con il resto del
-    progetto, che non ha un fuso orario utente configurabile."""
-    start_field = {"dateTime": start}
-    end_field = {"dateTime": end}
-    if not (start.endswith("Z") or "+" in start[10:] or "-" in start[10:]):
-        start_field["timeZone"] = "UTC"
-    if not (end.endswith("Z") or "+" in end[10:] or "-" in end[10:]):
-        end_field["timeZone"] = "UTC"
+    """RF-010. `start`/`end` in formato RFC3339, oppure una data pura
+    (YYYY-MM-DD, senza "T") per un evento "tutto il giorno" — l'API Calendar
+    vuole il campo `date`, non `dateTime`, in quel caso. Quando `start`/`end`
+    hanno un orario ma nessun fuso esplicito (nessun `+`, `-` dopo l'ora, o
+    `Z` finale), si assume UTC — coerente con il resto del progetto, che non
+    ha un fuso orario utente configurabile."""
+
+    def _event_field(value: str) -> dict:
+        if "T" not in value:
+            return {"date": value}
+        field = {"dateTime": value}
+        if not (value.endswith("Z") or "+" in value[10:] or "-" in value[10:]):
+            field["timeZone"] = "UTC"
+        return field
+
+    start_field = _event_field(start)
+    end_field = _event_field(end)
 
     try:
         response = requests.post(

@@ -17,13 +17,19 @@ chat_bp = Blueprint("chat", __name__, url_prefix="/api/chat")
 @login_required
 @limiter.limit("15 per minute")
 def send_message():
-    settings = current_app.config["JARVIS_SETTINGS"]
-    db = get_supabase_client(settings)
-
     body = request.get_json(silent=True) or {}
     text = (body.get("text") or "").strip()
     image = body.get("image")
     conversation_id = body.get("conversation_id")
+
+    if conversation_id is not None:
+        try:
+            uuid.UUID(conversation_id)
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": f"conversation_id {conversation_id!r} non valido"}), 400
+
+    settings = current_app.config["JARVIS_SETTINGS"]
+    db = get_supabase_client(settings)
 
     try:
         result = process_message(

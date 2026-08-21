@@ -111,6 +111,20 @@ def test_create_event_respects_explicit_timezone_offset():
     assert sent_json["start"] == {"dateTime": "2026-08-22T17:00:00+02:00"}
 
 
+def test_create_event_uses_date_field_for_all_day_events():
+    """Un evento "tutto il giorno" (data senza orario) va rappresentato con
+    il campo `date`, non `dateTime` + timeZone — altrimenti l'API Calendar
+    rifiuta la richiesta come malformata."""
+    settings = _settings()
+    resp = _resp({"id": "evt-3"})
+    with patch("app.calendar_service.requests.post", return_value=resp) as mock_post:
+        create_event("token", settings, summary="Compleanno", start="2026-08-22", end="2026-08-23")
+
+    sent_json = mock_post.call_args.kwargs["json"]
+    assert sent_json["start"] == {"date": "2026-08-22"}
+    assert sent_json["end"] == {"date": "2026-08-23"}
+
+
 def test_create_event_raises_on_network_error():
     settings = _settings()
     with patch("app.calendar_service.requests.post", side_effect=requests.ConnectionError("boom")):

@@ -361,7 +361,10 @@ function renderActionCard(action) {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "jv-action-btn";
-    open.textContent = "Apri " + (action.target === "claude" ? "Claude" : "ChatGPT");
+    // Deriva l'etichetta dal target invece di un elenco fisso: DELEGATION_URLS
+    // (backend) oggi contiene solo "claude", ma non deve servire un'altra
+    // modifica qui se in futuro se ne aggiunge un altro.
+    open.textContent = "Apri " + action.target.charAt(0).toUpperCase() + action.target.slice(1);
     open.addEventListener("click", () => window.open(action.url, "_blank", "noopener"));
 
     card.append(copy, open);
@@ -579,6 +582,10 @@ async function sendMessage(text) {
   setMode("responding", brain + " is answering");
 
   await refreshConversations();
+  // Se nel frattempo è partito un invio più recente, non continuare a fare
+  // lavoro per questa risposta ormai superata (in particolare non parlarla
+  // sopra alla risposta più recente).
+  if (myToken !== requestToken) return;
   await speak(msg.content);
 
   if (myToken === requestToken) setMode("idle");
@@ -593,7 +600,28 @@ messageForm.addEventListener("submit", (e) => {
 
 function onSceneReady() {
   scene.onNucleusClick = () => startVoice();
-  scene.onSelectionChange = (data) => renderPanel(data);
+  scene.onSelectionChange = (data) => {
+    renderPanel(data);
+    // Copre anche i percorsi di deselezione che bypassano deselectConversation()
+    // (tasto Esc, ri-click sullo stesso corpo per deselezionarlo): senza
+    // questo, currentConversationId/il trascritto restavano quelli della
+    // conversazione precedente anche se il pannello si nascondeva.
+    if (!data && currentConversationId) {
+      currentConversationId = null;
+      pendingAction = null;
+      renderSidebarRows();
+      msgs = [];
+      renderTranscript();
+    }
+  };
+  // Click diretto su un corpo nella scena 3D (non dalla sidebar): la scena
+  // gestisce già selezione/deselezione internamente, ma senza questo hook
+  // currentConversationId e il trascritto restavano quelli della
+  // conversazione precedente.
+  scene.onBodyClick = (bodyId) => {
+    if (scene.selected && scene.selected.data.id === bodyId) selectConversation(bodyId);
+    else deselectConversation();
+  };
 }
 
 // ---------- Login / bootstrap ----------
@@ -750,6 +778,11 @@ function renderProjectsList(projects) {
       if (ok) {
         item.remove();
         await refreshProjects();
+        // Le conversazioni del progetto restano (project_id passa a null
+        // lato server, ON DELETE SET NULL): senza questo refresh, la cache
+        // locale (allBodies) e il menu a tendina del pannello di dettaglio
+        // restavano con il vecchio project_id ormai inesistente.
+        await refreshConversations();
         if (!projectsListEl.children.length) renderProjectsList([]);
       }
     });
@@ -765,12 +798,21 @@ function openProjectContextEditor(item, project) {
     <button type="button" class="jv-action-btn primary">Salva</button>`;
   const textarea = area.querySelector("textarea");
   textarea.value = project.context || "";
-  area.querySelector(".jv-action-btn").addEventListener("click", async () => {
+  const saveBtn = area.querySelector(".jv-action-btn");
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
     const { ok } = await api(`/api/projects/${project.id}`, {
       method: "PATCH",
       body: JSON.stringify({ context: textarea.value.trim() }),
     });
-    if (ok) renderProjectsList(await refreshProjects());
+    if (ok) {
+      renderProjectsList(await refreshProjects());
+    } else {
+      // Senza feedback l'utente non capiva se il salvataggio era andato a
+      // buon fine — la textarea restava aperta senza nessun indizio.
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Riprova";
+    }
   });
   item.querySelector(".jv-library-item-body").appendChild(area);
 }
@@ -898,8 +940,10 @@ siteCreateForm.addEventListener("submit", async (e) => {
     siteTitleInput.value = "";
     const { body: listBody } = await api("/api/sites");
     renderSitesList(listBody?.data?.sites || []);
-  } else if (body?.error) {
-    siteUrlInput.setCustomValidity("URL non valido (deve iniziare con http:// o https://)");
+  } else {
+    // body?.error può mancare (es. 500 senza corpo JSON, o errore di rete):
+    // senza un ramo di default l'utente non riceveva nessun avviso.
+    siteUrlInput.setCustomValidity(body?.error || "Salvataggio non riuscito — riprova.");
     siteUrlInput.reportValidity();
     siteUrlInput.setCustomValidity("");
   }

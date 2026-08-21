@@ -74,6 +74,12 @@ def extract_facts(user_text: str, known_facts: list[dict], settings: Settings) -
 
     facts = []
     for f in data.get("facts", []):
+        # Il modello dovrebbe rispettare lo schema richiesto, ma non è
+        # garantito (es. potrebbe restituire una lista di stringhe invece di
+        # oggetti): un elemento malformato va scartato, non deve mai far
+        # fallire l'intera estrazione.
+        if not isinstance(f, dict):
+            continue
         category = f.get("category")
         fact_text = (f.get("fact") or "").strip()
         if category not in VALID_CATEGORIES or not fact_text:

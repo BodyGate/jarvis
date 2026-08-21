@@ -3,6 +3,60 @@
 Tutte le milestone rilevanti del progetto JARVIS sono tracciate qui, in ordine
 cronologico inverso (più recente in cima).
 
+## [Unreleased] — Audit completo del progetto: 8 bug corretti
+
+Su richiesta dell'utente ("verifica tutto il progetto e controlla che non ci
+siano altri errori o bug"), revisione multi-angolo dell'intero codebase
+(8 agenti indipendenti: correttezza backend/frontend, regressioni dai
+commit di oggi, tracciamento cross-file, riuso/duplicazione,
+semplificazione). Corretti tutti i bug di correttezza reali trovati; le
+proposte di puro refactoring/deduplicazione non sono state applicate per
+non introdurre rischio non necessario.
+
+### Fixed
+- `backend/app/device_agent.py`: **regressione introdotta oggi stesso** —
+  ripulendo lo scaffolding di debug del bug del timeout dell'agente locale,
+  il `try/except` attorno ad `authenticate_connection` era stato rimosso
+  insieme alle variabili diagnostiche; un errore imprevisto ora fa crashare
+  la connessione dell'agente invece di rifiutarla in modo pulito
+- `backend/app/chat_service.py`: la gestione della memoria a lungo termine
+  (RF-013) non rispettava il proprio contratto documentato ("non deve mai
+  rompere la chat") — `get_known_facts`/`extract_facts`/`save_facts` non
+  erano protette da try/except nel punto di chiamata; un output malformato
+  da Groq o un errore transitorio di Supabase faceva fallire l'intera
+  richiesta di chat con un 500
+- `backend/app/memory.py` (`extract_facts`): un elemento malformato nella
+  lista "facts" restituita da Groq (es. una stringa invece di un oggetto)
+  faceva sollevare un'eccezione non gestita
+- `backend/app/chat_service.py` (`_handle_calendar_create`): data/ora non in
+  formato standard dal router causava un 500 invece di un messaggio di
+  chiarimento, unico specialista senza questa protezione
+- `backend/app/router.py`: `confidence: null` esplicito nella risposta di
+  Groq faceva sollevare `TypeError` (`.get(key, default)` sostituisce il
+  default solo se la chiave manca, non se vale null)
+- `backend/app/chat_routes.py` (`POST /api/chat/message`): mancava la stessa
+  validazione del formato di `conversation_id` già presente sugli endpoint
+  gemelli — un id malformato causava un 500 da Postgres invece di un 400
+- `backend/app/calendar_service.py` (`create_event`): un evento "tutto il
+  giorno" (data senza orario) produceva un payload malformato per l'API
+  Google Calendar (campo `dateTime` invece di `date`)
+- `frontend/js/app.js`: cliccare un corpo direttamente nella scena 3D (non
+  dalla sidebar), o deselezionarlo con lo stesso click, non aggiornava
+  `currentConversationId`/il trascritto — il pannello si aggiornava ma lo
+  stato applicativo restava quello della conversazione precedente
+- `frontend/js/app.js`: percorsi di deselezione che bypassano
+  `deselectConversation()` (tasto Esc, ri-click sullo stesso corpo)
+  lasciavano `currentConversationId` non sincronizzato
+- `frontend/js/app.js`: race condition minore in `sendMessage` — un invio
+  superato da uno più recente continuava comunque a leggere ad alta voce la
+  risposta vecchia
+- `frontend/js/app.js`: eliminare un progetto non aggiornava la cache locale
+  delle conversazioni, lasciando il menu a tendina del pannello con un
+  project_id non più esistente
+- `frontend/js/app.js`: fallimenti silenziosi senza feedback in due punti
+  (creazione sito, salvataggio contesto progetto)
+- 4 nuovi test di regressione, 243/243 passanti nel modulo `backend/tests`
+
 ## [Unreleased] — Fix: aprendo una conversazione si vedeva solo l'ultimo scambio
 
 Segnalato dall'utente: aprendo una conversazione dalla lista si leggeva solo

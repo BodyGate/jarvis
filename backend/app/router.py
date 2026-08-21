@@ -203,6 +203,14 @@ def classify_intent(text: str, settings: Settings) -> dict:
 
     specialist = specialist if target == "local" else None
 
+    # .get(key, default) sostituisce il default solo se la chiave manca, non
+    # se vale esplicitamente null — con response_format json_object il JSON
+    # è garantito valido, ma non che "confidence" sia un numero.
+    try:
+        confidence = float(classification.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
     return {
         "intent": classification.get("intent", "unknown"),
         "target": target,
@@ -215,7 +223,7 @@ def classify_intent(text: str, settings: Settings) -> dict:
         "email_to": email_to if specialist == "email_send" else None,
         "device_url": device_url if specialist == "device_open" else None,
         "delete_scope": delete_scope if specialist == "conversation_delete" else None,
-        "confidence": float(classification.get("confidence", 0.0)),
+        "confidence": confidence,
     }
 
 
